@@ -26,7 +26,7 @@ data class VideoEntry(
 ) {
     val seriesName: String
         get() = title
-            .replace(Regex("(?i)[. _-]*S\\d{1,2}E\\d{1,3}.*$"), "")
+            .replace(Regex("(?i)[. _-]*(S\\d{1,2}E\\d{1,3}|\\d{1,2}x\\d{1,3}).*$"), "")
             .replace(Regex("(?i)[. _-]*(temporada|season)[. _-]*\\d+.*$"), "")
             .replace(Regex("[._]+"), " ")
             .trim()
@@ -125,6 +125,7 @@ object MediaCatalog {
                 val folderPath = normalizePath(cursor.getString(path).orEmpty())
                 val folderName = folderPath.trimEnd('/').substringAfterLast('/').ifBlank { "Vídeos" }
                 val episodeMatch = Regex("(?i)S(\\d{1,2})E(\\d{1,3})").find(fileName)
+                    ?: Regex("(?i)(\\d{1,2})x(\\d{1,3})").find(fileName)
                     ?: Regex("(?i)(?:temporada|season)[ ._-]*(\\d+).*?(?:epis[oó]dio|episode|ep)[ ._-]*(\\d+)").find(fileName)
                 val season = episodeMatch?.groupValues?.getOrNull(1)?.toIntOrNull()
                 val episode = episodeMatch?.groupValues?.getOrNull(2)?.toIntOrNull()
