@@ -259,9 +259,15 @@ class MainActivity : ComponentActivity() {
                                     }
                                     val episodes = catalog.videos.filter { it.seriesName == selectedSeries }
                                         .sortedWith(compareBy<VideoEntry> { it.season ?: 0 }.thenBy { it.episode ?: 0 }.thenBy { it.title })
+                                    val seasons = episodes.groupBy { it.season ?: 1 }.toSortedMap()
                                     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        items(episodes, key = { it.uri.toString() }) { video ->
-                                            VideoRow(video) { playVideo(video) }
+                                        seasons.forEach { (season, seasonEpisodes) ->
+                                            item(key = "season:$season") {
+                                                Text("TEMPORADA $season", color = VioletSoft, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                            items(seasonEpisodes, key = { it.uri.toString() }) { video ->
+                                                VideoRow(video) { playVideo(video) }
+                                            }
                                         }
                                     }
                                 } else LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 14.dp)) {
