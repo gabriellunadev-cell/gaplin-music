@@ -14,7 +14,8 @@ data class AudioTrack(
     val folderPath: String,
     val durationMs: Long,
     val album: String = "Álbum desconhecido",
-    val albumId: Long = -1L
+    val albumId: Long = -1L,
+    val artworkUri: Uri? = null
 )
 
 data class VideoEntry(
@@ -96,7 +97,10 @@ object MediaCatalog {
                     folderPath = normalizePath(rawPath),
                     durationMs = cursor.getLong(duration),
                     album = cursor.getString(album)?.takeIf(String::isNotBlank) ?: "Álbum desconhecido",
-                    albumId = cursor.getLong(albumId)
+                    albumId = cursor.getLong(albumId),
+                    artworkUri = cursor.getLong(albumId).takeIf { it > 0L }?.let {
+                        ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), it)
+                    }
                 )
             }
         }
