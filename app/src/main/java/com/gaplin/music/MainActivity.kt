@@ -40,6 +40,9 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.media3.ui.PlayerView
 import java.util.Locale
 
@@ -59,6 +62,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var player: MediaController
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var playerReady by mutableStateOf(false)
+    private var controllerFailed by mutableStateOf(false)
     private var audioPermission by mutableStateOf(false)
     private var videoPermission by mutableStateOf(false)
     private var selectedTreeUri by mutableStateOf<Uri?>(null)
@@ -105,15 +109,37 @@ class MainActivity : ComponentActivity() {
             var showPlayer by remember { mutableStateOf(false) }
             var showFullscreenVideo by remember { mutableStateOf(false) }
             var playbackError by remember { mutableStateOf<String?>(null) }
+            var scanError by remember { mutableStateOf<String?>(null) }
+            var scanInProgress by remember { mutableStateOf(false) }
+            val scope = rememberCoroutineScope()
+            val snackbarHostState = remember { SnackbarHostState() }
 
             fun scanLibrary() {
-                val indexed = MediaCatalog.scan(this)
-                val selected = selectedTreeUri?.let { MediaCatalog.scanSelectedTree(this, it) }
-                catalog = if (selected == null) indexed else MediaSnapshot(
-                    audio = (indexed.audio + selected.audio).distinctBy { it.uri.toString() },
-                    videos = (indexed.videos + selected.videos).distinctBy { it.uri.toString() }
-                )
-                favoriteUris = loadFavorites()
+                if (scanInProgress) return
+                scope.launch {
+                    scanInProgress = true
+                    val treeUri = selectedTreeUri
+                    try {
+                        val snapshot = withContext(Dispatchers.IO) {
+                            val indexed = MediaCatalog.scan(this@MainActivity)
+                            val selected = treeUri?.let {
+                                MediaCatalog.scanSelectedTree(this@MainActivity, it)
+                            }
+                            if (selected == null) indexed else MediaSnapshot(
+                                audio = (indexed.audio + selected.audio).distinctBy { it.uri.toString() },
+                                videos = (indexed.videos + selected.videos).distinctBy { it.uri.toString() }
+                            )
+                        }
+                        catalog = snapshot
+                        favoriteUris = loadFavorites()
+                    } catch (_: SecurityException) {
+                        scanError = "O acesso a uma pasta foi revogado. Selecione a pasta novamente."
+                    } catch (_: Exception) {
+                        scanError = "Não foi possível atualizar a biblioteca. Tente novamente."
+                    } finally {
+                        scanInProgress = false
+                    }
+                }
             }
 
             LaunchedEffect(audioPermission, videoPermission) {
@@ -203,14 +229,24 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(colorScheme = darkColorScheme(
                 primary = Violet, secondary = Cyan, background = Bg, surface = SurfaceDark
             )) {
-                LaunchedEffect(playbackError) {
-                    playbackError?.let {
-                        // Error is kept visible to the user instead of failing silently.
-                        playbackError = null
-                    }
+                LaunchedEffect(playbackError, scanError, controllerFailed) {
+                    val message = playbackError ?: scanError ?: if (controllerFailed) {
+                        "O serviço de reprodução não conseguiu iniciar. Feche e abra o aplicativo novamente."
+                    } else null
+                    if (message != null) snackbarHostState.showSnackbar(message)
+                    playbackError = null
+                    scanError = null
                 }
                 Scaffold(
                     containerColor = Bg,
+                    snackbarHost = {
+                        SnackbarHost(
+                            hostState = snackbarHostState,
+                            snackbar = { data ->
+                                Snackbar(snackbarData = data, containerColor = SurfaceRaised, contentColor = Color.White)
+                            }
+                        )
+                    },
                     bottomBar = {
                         NavigationBar(containerColor = Color(0xFF100D17), tonalElevation = 0.dp) {
                             AppTab.entries.forEach { tab ->
@@ -463,6 +499,7 @@ class MainActivity : ComponentActivity() {
                 playerReady = true
             } catch (_: Exception) {
                 playerReady = false
+                controllerFailed = true
             }
         }, ContextCompat.getMainExecutor(this))
     }
