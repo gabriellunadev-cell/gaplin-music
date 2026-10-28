@@ -3,6 +3,7 @@ package com.gaplin.music
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -50,6 +51,21 @@ class MainActivity : ComponentActivity() {
     private lateinit var player: ExoPlayer
     private var audioPermission by mutableStateOf(false)
     private var videoPermission by mutableStateOf(false)
+    private var selectedTreeUri by mutableStateOf<Uri?>(null)
+
+    private val folderPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            try {
+                contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+                selectedTreeUri = uri
+                getSharedPreferences("gaplin_music", MODE_PRIVATE).edit()
+                    .putString("media_tree_uri", uri.toString()).apply()
+            } catch (_: SecurityException) { }
+        }
+    }
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -60,6 +76,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         player = ExoPlayer.Builder(this).build()
+        selectedTreeUri = getSharedPreferences("gaplin_music", MODE_PRIVATE)
+            .getString("media_tree_uri", null)?.let(Uri::parse)
         refreshPermissions()
         requestMissingPermissions()
 
@@ -77,7 +95,12 @@ class MainActivity : ComponentActivity() {
             var showPlayer by remember { mutableStateOf(false) }
 
             fun scanLibrary() {
-                catalog = MediaCatalog.scan(this)
+                val indexed = MediaCatalog.scan(this)
+                val selected = selectedTreeUri?.let { MediaCatalog.scanSelectedTree(this, it) }
+                catalog = if (selected == null) indexed else MediaSnapshot(
+                    audio = (indexed.audio + selected.audio).distinctBy { it.uri.toString() },
+                    videos = (indexed.videos + selected.videos).distinctBy { it.uri.toString() }
+                )
                 favoriteUris = loadFavorites()
             }
 
@@ -203,7 +226,25 @@ class MainActivity : ComponentActivity() {
                                 ) else AudioList(favorites, currentAudio, favoriteUris, ::playAudio, ::toggleFavorite)
                             }
                             AppTab.FILES -> {
-                                ScreenHeading("Explorador de mídia", "${catalog.folders.size} pastas indexadas")
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text("Explorador de mídia", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                                        Text("${catalog.folders.size} pastas indexadas", color = TextMuted, fontSize = 12.sp)
+                                    }
+                                    OutlinedButton(onClick = { folderPicker.launch(selectedTreeUri) }) {
+                                        Icon(Icons.Default.CreateNewFolder, null, modifier = Modifier.size(17.dp))
+                                        Spacer(Modifier.width(5.dp))
+                                        Text("Adicionar pasta", fontSize = 11.sp)
+                                    }
+                                }
+                                if (selectedTreeUri != null) {
+                                    TextButton(onClick = {
+                                        try { contentResolver.releasePersistableUriPermission(selectedTreeUri!!, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: SecurityException) { }
+                                        selectedTreeUri = null
+                                        getSharedPreferences("gaplin_music", MODE_PRIVATE).edit().remove("media_tree_uri").apply()
+                                        scanLibrary()
+                                    }) { Text("Remover pasta selecionada", color = VioletSoft, fontSize = 11.sp) }
+                                }
                                 SearchBox(search) { search = it }
                                 val folders = catalog.folders.filter { it.contains(search, true) }
                                 if (selectedFolder == null) {
