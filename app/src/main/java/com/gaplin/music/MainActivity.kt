@@ -15,6 +15,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,6 +54,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.media3.ui.PlayerView
 import java.util.Locale
+import org.json.JSONArray
+import org.json.JSONObject
 
 private val Bg = Color(0xFF050D22)
 private val SurfaceDark = Color(0xFF0D1B3A)
@@ -60,6 +64,8 @@ private val Violet = Color(0xFFEA168F)
 private val VioletSoft = Color(0xFFB67CFF)
 private val Cyan = Color(0xFF4AA8FF)
 private val TextMuted = Color(0xFF8798BD)
+
+private data class LocalPlaylist(val id: String, val name: String, val trackUris: List<String>)
 
 private enum class AppTab(val label: String) {
     HOME("Início"), MUSIC("Músicas"), FILES("Arquivos"), FAVORITES("Favoritos"), VIDEOS("Vídeos")
@@ -548,6 +554,42 @@ class MainActivity : ComponentActivity() {
             arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
         } else emptyArray()
         if (permissions.isNotEmpty()) permissionLauncher.launch(permissions)
+    }
+
+    private fun loadPlaylists(): List<LocalPlaylist> {
+        val raw = getSharedPreferences("gaplin_music", MODE_PRIVATE).getString("playlists", "[]") ?: "[]"
+        return runCatching {
+            val array = JSONArray(raw)
+            buildList {
+                for (index in 0 until array.length()) {
+                    val item = array.optJSONObject(index) ?: continue
+                    val tracks = item.optJSONArray("tracks") ?: JSONArray()
+                    val uris = buildList {
+                        for (trackIndex in 0 until tracks.length()) {
+                            tracks.optString(trackIndex).takeIf(String::isNotBlank)?.let(::add)
+                        }
+                    }
+                    val id = item.optString("id")
+                    val name = item.optString("name")
+                    if (id.isNotBlank() && name.isNotBlank()) add(LocalPlaylist(id, name, uris))
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun savePlaylists(playlists: List<LocalPlaylist>) {
+        val array = JSONArray()
+        playlists.forEach { playlist ->
+            array.put(
+                JSONObject()
+                    .put("id", playlist.id)
+                    .put("name", playlist.name)
+                    .put("tracks", JSONArray(playlist.trackUris))
+            )
+        }
+        getSharedPreferences("gaplin_music", MODE_PRIVATE).edit()
+            .putString("playlists", array.toString())
+            .apply()
     }
 
     private fun loadFavorites(): Set<String> =
