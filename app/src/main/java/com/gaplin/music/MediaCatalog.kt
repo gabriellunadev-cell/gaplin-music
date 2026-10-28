@@ -144,5 +144,5 @@ object MediaCatalog {
     }
 
     private fun normalizePath(path: String): String =
-        path.replace('\\\\', '/').trimEnd('/').ifBlank { "Armazenamento interno" }
+        path.replace('\\', '/').trimEnd('/').ifBlank { "Armazenamento interno" }
 }
