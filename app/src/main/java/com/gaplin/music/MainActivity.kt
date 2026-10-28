@@ -2,6 +2,7 @@ package com.gaplin.music
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.content.ComponentName
 import android.content.pm.ActivityInfo
 import android.os.Build
 import android.net.Uri
@@ -34,7 +35,11 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
+import com.google.common.util.concurrent.ListenableFuture
 import androidx.media3.ui.PlayerView
 import java.util.Locale
 
@@ -51,7 +56,9 @@ private enum class AppTab(val label: String) {
 }
 
 class MainActivity : ComponentActivity() {
-    private lateinit var player: ExoPlayer
+    private lateinit var player: MediaController
+    private var controllerFuture: ListenableFuture<MediaController>? = null
+    private var playerReady by mutableStateOf(false)
     private var audioPermission by mutableStateOf(false)
     private var videoPermission by mutableStateOf(false)
     private var selectedTreeUri by mutableStateOf<Uri?>(null)
@@ -78,7 +85,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        player = ExoPlayer.Builder(this).build()
+        connectPlaybackController()
         selectedTreeUri = getSharedPreferences("gaplin_music", MODE_PRIVATE)
             .getString("media_tree_uri", null)?.let(Uri::parse)
         refreshPermissions()
@@ -97,6 +104,7 @@ class MainActivity : ComponentActivity() {
             var videoMode by remember { mutableStateOf(false) }
             var showPlayer by remember { mutableStateOf(false) }
             var showFullscreenVideo by remember { mutableStateOf(false) }
+            var playbackError by remember { mutableStateOf<String?>(null) }
 
             fun scanLibrary() {
                 val indexed = MediaCatalog.scan(this)
@@ -112,11 +120,24 @@ class MainActivity : ComponentActivity() {
                 if (audioPermission || videoPermission) scanLibrary()
             }
 
-            DisposableEffect(player) {
+            DisposableEffect(playerReady) {
+                if (!playerReady) return@DisposableEffect onDispose { }
                 val listener = object : Player.Listener {
                     override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         if (playbackState == Player.STATE_ENDED) playing = false
+                    }
+                    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                        val mediaId = mediaItem?.mediaId ?: return
+                        if (videoMode) {
+                            catalog.videos.firstOrNull { it.uri.toString() == mediaId }?.let { currentVideo = it }
+                        } else {
+                            catalog.audio.firstOrNull { it.uri.toString() == mediaId }?.let { currentAudio = it }
+                        }
+                    }
+                    override fun onPlayerError(error: PlaybackException) {
+                        playing = false
+                        playbackError = "Não foi possível reproduzir este arquivo. Verifique o formato ou o acesso ao arquivo."
                     }
                 }
                 player.addListener(listener)
@@ -140,10 +161,21 @@ class MainActivity : ComponentActivity() {
                 showPlayer = false
                 val queue = catalog.audio
                 val startIndex = queue.indexOfFirst { it.uri == track.uri }
+                if (!playerReady) {
+                    playbackError = "O mecanismo de reprodução ainda está iniciando."
+                    return
+                }
+                fun mediaItem(item: AudioTrack) = MediaItem.Builder()
+                    .setMediaId(item.uri.toString())
+                    .setUri(item.uri)
+                    .setMediaMetadata(
+                        MediaMetadata.Builder().setTitle(item.title).setArtist(item.artist).build()
+                    )
+                    .build()
                 if (queue.isNotEmpty() && startIndex >= 0) {
-                    player.setMediaItems(queue.map { MediaItem.fromUri(it.uri) }, startIndex, 0L)
+                    player.setMediaItems(queue.map(::mediaItem), startIndex, 0L)
                 } else {
-                    player.setMediaItem(MediaItem.fromUri(track.uri))
+                    player.setMediaItem(mediaItem(track))
                 }
                 player.prepare()
                 player.play()
@@ -154,7 +186,16 @@ class MainActivity : ComponentActivity() {
                 currentAudio = null
                 videoMode = true
                 showPlayer = true
-                player.setMediaItem(MediaItem.fromUri(video.uri))
+                if (!playerReady) {
+                    playbackError = "O mecanismo de reprodução ainda está iniciando."
+                    return
+                }
+                val item = MediaItem.Builder()
+                    .setMediaId(video.uri.toString())
+                    .setUri(video.uri)
+                    .setMediaMetadata(MediaMetadata.Builder().setTitle(video.title).build())
+                    .build()
+                player.setMediaItem(item)
                 player.prepare()
                 player.play()
             }
@@ -162,6 +203,12 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(colorScheme = darkColorScheme(
                 primary = Violet, secondary = Cyan, background = Bg, surface = SurfaceDark
             )) {
+                LaunchedEffect(playbackError) {
+                    playbackError?.let {
+                        // Error is kept visible to the user instead of failing silently.
+                        playbackError = null
+                    }
+                }
                 Scaffold(
                     containerColor = Bg,
                     bottomBar = {
@@ -350,7 +397,7 @@ class MainActivity : ComponentActivity() {
 
                         }
 
-                        if (currentVideo != null && showPlayer) {
+                        if (currentVideo != null && showPlayer && !showFullscreenVideo && playerReady) {
                             VideoPlaybackPanel(
                                 player = player,
                                 title = currentVideo!!.title,
@@ -360,7 +407,7 @@ class MainActivity : ComponentActivity() {
                                     showFullscreenVideo = true
                                 }
                             )
-                        } else if (currentAudio != null) {
+                        } else if (currentAudio != null && playerReady) {
                             MiniPlayer(
                                 title = currentAudio!!.title,
                                 subtitle = currentAudio!!.artist,
@@ -369,7 +416,7 @@ class MainActivity : ComponentActivity() {
                                 onNext = { if (player.hasNextMediaItem()) player.seekToNextMediaItem() }
                             )
                         }
-                        if (showFullscreenVideo && currentVideo != null) {
+                        if (showFullscreenVideo && currentVideo != null && playerReady) {
                             Dialog(
                                 onDismissRequest = {
                                     showFullscreenVideo = false
@@ -403,6 +450,21 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun connectPlaybackController() {
+        val token = SessionToken(this, ComponentName(this, com.gaplin.music.playback.PlaybackService::class.java))
+        val future = MediaController.Builder(this, token).buildAsync()
+        controllerFuture = future
+        future.addListener({
+            if (isDestroyed) return@addListener
+            try {
+                player = future.get()
+                playerReady = true
+            } catch (_: Exception) {
+                playerReady = false
+            }
+        }, ContextCompat.getMainExecutor(this))
     }
 
     private fun refreshPermissions() {
@@ -440,7 +502,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        if (::player.isInitialized) player.release()
+        controllerFuture?.let { MediaController.releaseFuture(it) }
+        controllerFuture = null
         super.onDestroy()
     }
 }
@@ -695,7 +758,7 @@ private fun MiniPlayer(title: String, subtitle: String, playing: Boolean, onTogg
 }
 
 @Composable
-private fun VideoPlaybackPanel(player: ExoPlayer, title: String, onClose: () -> Unit, onFullscreen: () -> Unit) {
+private fun VideoPlaybackPanel(player: Player, title: String, onClose: () -> Unit, onFullscreen: () -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SurfaceDark)) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, color = Color.White, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp)
