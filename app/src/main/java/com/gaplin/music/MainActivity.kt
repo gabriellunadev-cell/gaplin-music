@@ -122,6 +122,15 @@ class MainActivity : ComponentActivity() {
             var showPlayer by remember { mutableStateOf(false) }
             var showFullscreenVideo by remember { mutableStateOf(false) }
             var showMusicPlayer by remember { mutableStateOf(false) }
+            var musicSection by remember { mutableStateOf("Músicas") }
+            var selectedMusicGroup by remember { mutableStateOf<String?>(null) }
+            var playlists by remember { mutableStateOf(loadPlaylists()) }
+            var selectedPlaylistId by remember { mutableStateOf<String?>(null) }
+            var showCreatePlaylist by remember { mutableStateOf(false) }
+            var newPlaylistName by remember { mutableStateOf("") }
+            var showPlaylistPicker by remember { mutableStateOf(false) }
+            var trackToAdd by remember { mutableStateOf<AudioTrack?>(null) }
+            var playbackQueue by remember { mutableStateOf<List<AudioTrack>>(emptyList()) }
             var previousVideoOrientation by remember { mutableStateOf(requestedOrientation) }
             var playbackError by remember { mutableStateOf<String?>(null) }
             var scanError by remember { mutableStateOf<String?>(null) }
@@ -185,6 +194,34 @@ class MainActivity : ComponentActivity() {
                 onDispose { player.removeListener(listener) }
             }
 
+            fun persistPlaylists(updated: List<LocalPlaylist>) {
+                playlists = updated
+                savePlaylists(updated)
+            }
+
+            fun createPlaylist(name: String, initialTrack: AudioTrack? = null) {
+                val cleanName = name.trim()
+                if (cleanName.isEmpty()) return
+                val newPlaylist = LocalPlaylist(
+                    id = UUID.randomUUID().toString(),
+                    name = cleanName,
+                    trackUris = initialTrack?.let { listOf(it.uri.toString()) } ?: emptyList()
+                )
+                persistPlaylists(playlists + newPlaylist)
+                selectedPlaylistId = newPlaylist.id
+                musicSection = "Playlists"
+                selectedMusicGroup = null
+            }
+
+            fun addTrackToPlaylist(playlistId: String, track: AudioTrack) {
+                val updated = playlists.map { playlist ->
+                    if (playlist.id == playlistId && track.uri.toString() !in playlist.trackUris) {
+                        playlist.copy(trackUris = playlist.trackUris + track.uri.toString())
+                    } else playlist
+                }
+                persistPlaylists(updated)
+            }
+
             fun toggleFavorite(track: AudioTrack) {
                 favoriteUris = if (track.uri.toString() in favoriteUris) {
                     favoriteUris - track.uri.toString()
@@ -195,12 +232,13 @@ class MainActivity : ComponentActivity() {
                     .putStringSet("favorites", favoriteUris).apply()
             }
 
-            fun playAudio(track: AudioTrack) {
+            fun playAudio(track: AudioTrack, sourceQueue: List<AudioTrack> = catalog.audio) {
                 currentAudio = track
                 currentVideo = null
                 videoMode = false
                 showPlayer = false
-                val queue = catalog.audio
+                val queue = sourceQueue.ifEmpty { listOf(track) }
+                playbackQueue = queue
                 val startIndex = queue.indexOfFirst { it.uri == track.uri }
                 if (!playerReady) {
                     playbackError = "O mecanismo de reprodução ainda está iniciando."
@@ -312,7 +350,7 @@ class MainActivity : ComponentActivity() {
                                 onMusic = { activeTab = AppTab.MUSIC },
                                 onVideos = { activeTab = AppTab.VIDEOS },
                                 onFiles = { activeTab = AppTab.FILES },
-                                onPlayAudio = ::playAudio,
+                                onPlayAudio = { playAudio(it, catalog.audio) },
                                 onPlayVideo = ::playVideo,
                                 onRefresh = ::scanLibrary
                             )
@@ -323,7 +361,7 @@ class MainActivity : ComponentActivity() {
                                     it.title.contains(search, true) || it.artist.contains(search, true) ||
                                         it.folderPath.contains(search, true)
                                 }
-                                AudioList(filtered, currentAudio, favoriteUris, ::playAudio, ::toggleFavorite)
+                                AudioList(filtered, currentAudio, favoriteUris, { playAudio(it, filtered) }, ::toggleFavorite)
                             }
                             AppTab.FAVORITES -> {
                                 ScreenHeading("Sua coleção", "${favoriteUris.size} músicas salvas")
@@ -331,7 +369,7 @@ class MainActivity : ComponentActivity() {
                                 if (favorites.isEmpty()) EmptyPanel(
                                     Icons.Default.FavoriteBorder, "Seus favoritos começam aqui",
                                     "Use o coração ao lado de uma música para guardá-la nesta coleção."
-                                ) else AudioList(favorites, currentAudio, favoriteUris, ::playAudio, ::toggleFavorite)
+                                ) else AudioList(favorites, currentAudio, favoriteUris, { playAudio(it, favorites) }, ::toggleFavorite)
                             }
                             AppTab.FILES -> {
                                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -380,7 +418,7 @@ class MainActivity : ComponentActivity() {
                                         if (folderAudio.isNotEmpty()) item { Text("MÚSICAS", color = VioletSoft, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                                         items(folderAudio, key = { it.uri.toString() }) { track ->
                                             AudioRow(track, currentAudio, track.uri.toString() in favoriteUris,
-                                                { playAudio(track) }, { toggleFavorite(track) })
+                                                { playAudio(track, folderAudio) }, { toggleFavorite(track) })
                                         }
                                         if (folderVideos.isNotEmpty()) item { Text("VÍDEOS", color = VioletSoft, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                                         items(folderVideos, key = { it.uri.toString() }) { video ->
@@ -472,9 +510,10 @@ class MainActivity : ComponentActivity() {
                                 NowPlayingDialog(
                                     player = player,
                                     track = currentAudio!!,
-                                    queue = catalog.audio,
+                                    queue = playbackQueue.ifEmpty { catalog.audio },
                                     favorite = currentAudio!!.uri.toString() in favoriteUris,
                                     onFavorite = { toggleFavorite(currentAudio!!) },
+                                    onAddToPlaylist = { trackToAdd = currentAudio; showPlaylistPicker = true },
                                     onDismiss = { showMusicPlayer = false }
                                 )
                             }
