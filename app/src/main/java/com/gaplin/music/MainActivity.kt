@@ -72,6 +72,7 @@ class MainActivity : ComponentActivity() {
             var currentVideo by remember { mutableStateOf<VideoEntry?>(null) }
             var playing by remember { mutableStateOf(false) }
             var selectedFolder by remember { mutableStateOf<String?>(null) }
+            var selectedSeries by remember { mutableStateOf<String?>(null) }
             var videoMode by remember { mutableStateOf(false) }
             var showPlayer by remember { mutableStateOf(false) }
 
@@ -138,6 +139,7 @@ class MainActivity : ComponentActivity() {
                                     onClick = {
                                         activeTab = tab
                                         selectedFolder = null
+                                        selectedSeries = null
                                         search = ""
                                     },
                                     icon = {
@@ -169,7 +171,7 @@ class MainActivity : ComponentActivity() {
                             .padding(horizontal = 18.dp)
                     ) {
                         TopBrand(onRefresh = ::scanLibrary)
-                        when (activeTab) {
+                        Box(Modifier.weight(1f).fillMaxWidth()) {\n                        when (activeTab) {
                             AppTab.HOME -> HomeScreen(
                                 catalog = catalog,
                                 currentAudio = currentAudio,
@@ -265,7 +267,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
-                        if (currentVideo != null && showPlayer) {
+                        }\n\n                        if (currentVideo != null && showPlayer) {
                             VideoPlaybackPanel(
                                 player = player,
                                 title = currentVideo!!.title,
@@ -526,9 +528,9 @@ private fun VideoRow(video: VideoEntry, onPlay: () -> Unit) {
 }
 
 @Composable
-private fun SeriesCard(name: String, episodes: List<VideoEntry>) {
+private fun SeriesCard(name: String, episodes: List<VideoEntry>, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(SurfaceDark).padding(13.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(SurfaceDark).clickable(onClick = onClick).padding(13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(SurfaceRaised), contentAlignment = Alignment.Center) {
