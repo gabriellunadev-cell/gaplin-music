@@ -2,6 +2,7 @@ package com.gaplin.music
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
 import android.content.ComponentName
 import android.content.pm.ActivityInfo
 import android.os.Build
@@ -10,6 +11,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -24,6 +26,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -41,18 +46,20 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.media3.ui.PlayerView
 import java.util.Locale
 
-private val Bg = Color(0xFF08070D)
-private val SurfaceDark = Color(0xFF15121E)
-private val SurfaceRaised = Color(0xFF211A30)
-private val Violet = Color(0xFF9B5CFF)
-private val VioletSoft = Color(0xFFBE9AFF)
-private val Cyan = Color(0xFF59D5FF)
-private val TextMuted = Color(0xFFAAA3B8)
+private val Bg = Color(0xFF050D22)
+private val SurfaceDark = Color(0xFF0D1B3A)
+private val SurfaceRaised = Color(0xFF17284D)
+private val Violet = Color(0xFFEA168F)
+private val VioletSoft = Color(0xFFB67CFF)
+private val Cyan = Color(0xFF4AA8FF)
+private val TextMuted = Color(0xFF8798BD)
 
 private enum class AppTab(val label: String) {
     HOME("Início"), MUSIC("Músicas"), FILES("Arquivos"), FAVORITES("Favoritos"), VIDEOS("Vídeos")
@@ -108,6 +115,8 @@ class MainActivity : ComponentActivity() {
             var videoMode by remember { mutableStateOf(false) }
             var showPlayer by remember { mutableStateOf(false) }
             var showFullscreenVideo by remember { mutableStateOf(false) }
+            var showMusicPlayer by remember { mutableStateOf(false) }
+            var previousVideoOrientation by remember { mutableStateOf(requestedOrientation) }
             var playbackError by remember { mutableStateOf<String?>(null) }
             var scanError by remember { mutableStateOf<String?>(null) }
             var scanInProgress by remember { mutableStateOf(false) }
@@ -439,6 +448,7 @@ class MainActivity : ComponentActivity() {
                                 title = currentVideo!!.title,
                                 onClose = { player.pause(); showPlayer = false },
                                 onFullscreen = {
+                                    previousVideoOrientation = requestedOrientation
                                     requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                                     showFullscreenVideo = true
                                 }
@@ -449,14 +459,25 @@ class MainActivity : ComponentActivity() {
                                 subtitle = currentAudio!!.artist,
                                 playing = playing,
                                 onToggle = { if (player.isPlaying) player.pause() else player.play() },
-                                onNext = { if (player.hasNextMediaItem()) player.seekToNextMediaItem() }
+                                onNext = { if (player.hasNextMediaItem()) player.seekToNextMediaItem() },
+                                onOpen = { showMusicPlayer = true }
                             )
+                            if (showMusicPlayer && currentAudio != null) {
+                                NowPlayingDialog(
+                                    player = player,
+                                    track = currentAudio!!,
+                                    queue = catalog.audio,
+                                    favorite = currentAudio!!.uri.toString() in favoriteUris,
+                                    onFavorite = { toggleFavorite(currentAudio!!) },
+                                    onDismiss = { showMusicPlayer = false }
+                                )
+                            }
                         }
                         if (showFullscreenVideo && currentVideo != null && playerReady) {
                             Dialog(
                                 onDismissRequest = {
                                     showFullscreenVideo = false
-                                    requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                                    requestedOrientation = previousVideoOrientation
                                 },
                                 properties = DialogProperties(
                                     usePlatformDefaultWidth = false,
@@ -708,9 +729,7 @@ private fun AudioRow(
             .clickable(onClick = onPlay).padding(horizontal = 9.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(43.dp).clip(RoundedCornerShape(12.dp)).background(SurfaceRaised), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.MusicNote, null, tint = VioletSoft)
-        }
+        TrackArtwork(track, Modifier.size(43.dp).clip(RoundedCornerShape(12.dp)))
         Column(Modifier.weight(1f).padding(horizontal = 11.dp)) {
             Text(track.title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(track.artist, color = TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -778,13 +797,16 @@ private fun FolderCard(path: String, count: Int, onClick: () -> Unit) {
 }
 
 @Composable
-private fun MiniPlayer(title: String, subtitle: String, playing: Boolean, onToggle: () -> Unit, onNext: () -> Unit) {
+private fun MiniPlayer(title: String, subtitle: String, playing: Boolean, onToggle: () -> Unit, onNext: () -> Unit, onOpen: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(17.dp))
-            .background(SurfaceRaised).padding(horizontal = 12.dp, vertical = 7.dp),
+            .background(Brush.horizontalGradient(listOf(Color(0xFF35217A), Color(0xFF8F247B), Color(0xFF172B56))))
+            .clickable(onClick = onOpen).padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Default.GraphicEq, null, tint = Cyan, modifier = Modifier.size(28.dp))
+        Box(Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF211A44)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.GraphicEq, null, tint = Cyan, modifier = Modifier.size(27.dp))
+        }
         Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
             Text(title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(subtitle, color = TextMuted, fontSize = 10.sp, maxLines = 1)
@@ -793,6 +815,273 @@ private fun MiniPlayer(title: String, subtitle: String, playing: Boolean, onTogg
         IconButton(onClick = onNext) { Icon(Icons.Default.SkipNext, null, tint = Color.White) }
     }
 }
+
+
+@Composable
+private fun TrackArtwork(track: AudioTrack, modifier: Modifier = Modifier) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var artwork by remember(track.artworkUri) { mutableStateOf<ImageBitmap?>(null) }
+
+    LaunchedEffect(track.artworkUri) {
+        artwork = withContext(Dispatchers.IO) {
+            track.artworkUri?.let { uri ->
+                runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { stream ->
+                        BitmapFactory.decodeStream(stream)?.asImageBitmap()
+                    }
+                }.getOrNull()
+            }
+        }
+    }
+
+    if (artwork != null) {
+        Image(
+            bitmap = artwork!!,
+            contentDescription = "Capa de ${track.album}",
+            modifier = modifier,
+            contentScale = ContentScale.Crop
+        )
+    } else {
+        Box(
+            modifier.background(Brush.linearGradient(listOf(Color(0xFF48248A), Color(0xFF102A58)))),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.GraphicEq, null, tint = Color(0xFFD9C4FF), modifier = Modifier.size(25.dp))
+        }
+    }
+}
+
+@Composable
+private fun NowPlayingDialog(
+    player: Player,
+    track: AudioTrack,
+    queue: List<AudioTrack>,
+    favorite: Boolean,
+    onFavorite: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var position by remember(track.uri) { mutableStateOf(0L) }
+    var duration by remember(track.uri) { mutableStateOf(track.durationMs.coerceAtLeast(0L)) }
+    var sliderValue by remember(track.uri) { mutableStateOf(0f) }
+    var scrubbing by remember { mutableStateOf(false) }
+    var showQueue by remember { mutableStateOf(false) }
+    var showTimer by remember { mutableStateOf(false) }
+    var timerMinutes by remember { mutableStateOf("30") }
+    var timerJob by remember { mutableStateOf<Job?>(null) }
+    var speed by remember { mutableStateOf(1f) }
+    var volume by remember { mutableStateOf(player.volume) }
+    var shuffle by remember { mutableStateOf(player.shuffleModeEnabled) }
+    var repeatMode by remember { mutableStateOf(player.repeatMode) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(player, track.uri) {
+        while (true) {
+            if (!scrubbing) {
+                position = player.currentPosition.coerceAtLeast(0L)
+                duration = player.duration.takeIf { it > 0L } ?: track.durationMs.coerceAtLeast(0L)
+                sliderValue = if (duration > 0L) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+            }
+            delay(400)
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    listOf(Color(0xFF111A38), Color(0xFF1A163A), Color(0xFF090D1C), Color(0xFF050812))
+                )
+            )
+        ) {
+            Column(
+                Modifier.fillMaxSize().padding(horizontal = 22.dp, vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onDismiss) { Icon(Icons.Default.KeyboardArrowDown, "Fechar player", tint = Color.White) }
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("TOCANDO AGORA", color = VioletSoft, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                        Text("GAPLIN MUSIC", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
+                    }
+                    IconButton(onClick = { showQueue = !showQueue }) {
+                        Icon(Icons.Default.QueueMusic, "Fila de reprodução", tint = Color.White)
+                    }
+                }
+
+                Spacer(Modifier.height(18.dp))
+                TrackArtwork(
+                    track,
+                    Modifier.fillMaxWidth().weight(1f).aspectRatio(1f).clip(RoundedCornerShape(24.dp))
+                )
+                Spacer(Modifier.height(22.dp))
+
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(track.title, color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(track.artist, color = TextMuted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(track.album, color = VioletSoft, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    IconButton(onClick = onFavorite) {
+                        Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, tint = if (favorite) Violet else Color.White, modifier = Modifier.size(28.dp))
+                    }
+                }
+
+                Spacer(Modifier.height(15.dp))
+                Slider(
+                    value = sliderValue,
+                    onValueChange = {
+                        scrubbing = true
+                        sliderValue = it
+                    },
+                    onValueChangeFinished = {
+                        if (duration > 0L) player.seekTo((duration * sliderValue).toLong())
+                        scrubbing = false
+                    },
+                    valueRange = 0f..1f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color.White,
+                        activeTrackColor = Violet,
+                        inactiveTrackColor = Color(0xFF48516D)
+                    )
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(formatDuration(position), color = TextMuted, fontSize = 11.sp)
+                    Text(formatDuration(duration), color = TextMuted, fontSize = 11.sp)
+                }
+
+                Spacer(Modifier.height(14.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = {
+                        shuffle = !shuffle
+                        player.shuffleModeEnabled = shuffle
+                    }) { Icon(Icons.Default.Shuffle, "Aleatório", tint = if (shuffle) Violet else TextMuted) }
+                    IconButton(onClick = {
+                        if (player.hasPreviousMediaItem()) player.seekToPreviousMediaItem()
+                        else player.seekTo(0L)
+                    }) { Icon(Icons.Default.SkipPrevious, "Anterior", tint = Color.White, modifier = Modifier.size(34.dp)) }
+                    FilledIconButton(
+                        onClick = { if (player.isPlaying) player.pause() else player.play() },
+                        modifier = Modifier.size(70.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color.White, contentColor = Color(0xFF15102B))
+                    ) {
+                        Icon(if (player.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, "Reproduzir", modifier = Modifier.size(38.dp))
+                    }
+                    IconButton(onClick = {
+                        if (player.hasNextMediaItem()) player.seekToNextMediaItem()
+                    }) { Icon(Icons.Default.SkipNext, "Próxima", tint = Color.White, modifier = Modifier.size(34.dp)) }
+                    IconButton(onClick = {
+                        repeatMode = when (repeatMode) {
+                            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                            else -> Player.REPEAT_MODE_OFF
+                        }
+                        player.repeatMode = repeatMode
+                    }) {
+                        Icon(Icons.Default.Repeat, "Repetir", tint = if (repeatMode == Player.REPEAT_MODE_OFF) TextMuted else Violet)
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.VolumeDown, null, tint = TextMuted, modifier = Modifier.size(18.dp))
+                    Slider(
+                        value = volume,
+                        onValueChange = {
+                            volume = it
+                            player.volume = it
+                        },
+                        valueRange = 0f..1f,
+                        modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                        colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = Cyan, inactiveTrackColor = Color(0xFF48516D))
+                    )
+                    Text("1.0×", color = TextMuted, fontSize = 11.sp, modifier = Modifier.clickable {
+                        speed = when (speed) { 1f -> 1.25f; 1.25f -> 1.5f; 1.5f -> 2f; 2f -> 0.75f; else -> 1f }
+                        player.setPlaybackSpeed(speed)
+                    })
+                }
+
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    TextButton(onClick = { showTimer = true }) {
+                        Icon(Icons.Default.Timer, null, tint = VioletSoft)
+                        Spacer(Modifier.width(5.dp))
+                        Text("Temporizador", color = Color.White, fontSize = 11.sp)
+                    }
+                    TextButton(onClick = { showQueue = !showQueue }) {
+                        Icon(Icons.Default.QueueMusic, null, tint = VioletSoft)
+                        Spacer(Modifier.width(5.dp))
+                        Text("Fila", color = Color.White, fontSize = 11.sp)
+                    }
+                }
+
+                if (showQueue) {
+                    Column(Modifier.fillMaxWidth().heightIn(max = 190.dp).clip(RoundedCornerShape(16.dp)).background(SurfaceDark).padding(10.dp)) {
+                        Text("FILA DE REPRODUÇÃO", color = VioletSoft, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        LazyColumn {
+                            items(queue, key = { it.uri.toString() }) { item ->
+                                Row(
+                                    Modifier.fillMaxWidth().clickable {
+                                        val index = queue.indexOfFirst { it.uri == item.uri }
+                                        if (index >= 0 && index < player.mediaItemCount) {
+                                            player.seekTo(index, 0L)
+                                            player.play()
+                                        }
+                                    }.padding(vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(item.title, color = if (item.uri == track.uri) VioletSoft else Color.White, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp)
+                                    Text(item.artist, color = TextMuted, fontSize = 10.sp, maxLines = 1)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showTimer) {
+        AlertDialog(
+            onDismissRequest = { showTimer = false },
+            title = { Text("Temporizador de sono") },
+            text = {
+                OutlinedTextField(
+                    value = timerMinutes,
+                    onValueChange = { timerMinutes = it.filter(Char::isDigit).take(3) },
+                    label = { Text("Minutos") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val minutes = timerMinutes.toIntOrNull()?.coerceIn(1, 240) ?: 30
+                    timerJob?.cancel()
+                    timerJob = scope.launch {
+                        delay(minutes * 60_000L)
+                        player.pause()
+                        playerReadyNoop()
+                    }
+                    showTimer = false
+                }) { Text("Iniciar") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    timerJob?.cancel()
+                    timerJob = null
+                    showTimer = false
+                }) { Text("Cancelar timer") }
+            }
+        )
+    }
+}
+
+private fun playerReadyNoop() = Unit
 
 @Composable
 private fun VideoPlaybackPanel(player: Player, title: String, onClose: () -> Unit, onFullscreen: () -> Unit) {
