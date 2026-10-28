@@ -247,7 +247,9 @@ class MainActivity : ComponentActivity() {
                                     it.title.contains(search, true) || it.seriesName.contains(search, true) ||
                                         it.folderName.contains(search, true)
                                 }
-                                val grouped = filtered.groupBy { it.seriesName }
+                                val episodeItems = filtered.filter { it.season != null && it.episode != null }
+                                val movieItems = filtered.filter { it.season == null || it.episode == null }
+                                val grouped = episodeItems.groupBy { it.seriesName }.toSortedMap(String.CASE_INSENSITIVE_ORDER)
                                 if (selectedSeries != null) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         IconButton(onClick = { selectedSeries = null }) {
@@ -264,13 +266,20 @@ class MainActivity : ComponentActivity() {
                                     }
                                 } else LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 14.dp)) {
                                     if (filtered.isNotEmpty()) {
-                                        item { Text("BIBLIOTECA DE VÍDEOS", color = VioletSoft, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                                        items(filtered, key = { it.uri.toString() }) { video ->
-                                            VideoRow(video, { playVideo(video) })
+                                        if (movieItems.isNotEmpty()) {
+                                            item { Text("FILMES E VÍDEOS", color = VioletSoft, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                                            items(movieItems, key = { "movie:${it.uri}" }) { video ->
+                                                VideoRow(video, { playVideo(video) })
+                                            }
                                         }
-                                        item { Text("COLEÇÕES / SÉRIES DETECTADAS", color = VioletSoft, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                                        items(grouped.keys.toList(), key = { "series:$it" }) { series ->
-                                            SeriesCard(series, grouped[series].orEmpty(), onClick = { selectedSeries = series })
+                                        if (grouped.isNotEmpty()) {
+                                            item { Text("SÉRIES E TEMPORADAS", color = VioletSoft, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                                            items(grouped.keys.toList(), key = { "series:$it" }) { series ->
+                                                SeriesCard(series, grouped[series].orEmpty(), onClick = { selectedSeries = series })
+                                            }
+                                        }
+                                        if (movieItems.isEmpty() && grouped.isEmpty()) item {
+                                            EmptyPanel(Icons.Default.VideoLibrary, "Nenhum vídeo compatível", "Verifique o formato e as permissões de acesso.")
                                         }
                                     } else item {
                                         EmptyPanel(
