@@ -138,7 +138,13 @@ class MainActivity : ComponentActivity() {
                 currentVideo = null
                 videoMode = false
                 showPlayer = false
-                player.setMediaItem(MediaItem.fromUri(track.uri))
+                val queue = catalog.audio
+                val startIndex = queue.indexOfFirst { it.uri == track.uri }
+                if (queue.isNotEmpty() && startIndex >= 0) {
+                    player.setMediaItems(queue.map { MediaItem.fromUri(it.uri) }, startIndex, 0L)
+                } else {
+                    player.setMediaItem(MediaItem.fromUri(track.uri))
+                }
                 player.prepare()
                 player.play()
             }
