@@ -3,6 +3,7 @@ package com.gaplin.music
 import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
+import androidx.documentfile.provider.DocumentFile
 import android.os.Build
 import android.provider.MediaStore
 
@@ -142,6 +143,51 @@ object MediaCatalog {
             }
         }
         return result
+    }
+
+    fun scanSelectedTree(context: Context, treeUri: Uri): MediaSnapshot {
+        val root = DocumentFile.fromTreeUri(context, treeUri) ?: return MediaSnapshot(emptyList(), emptyList())
+        val audio = mutableListOf<AudioTrack>()
+        val videos = mutableListOf<VideoEntry>()
+        val audioExt = setOf("mp3", "m4a", "aac", "flac", "wav", "ogg", "opus")
+        val videoExt = setOf("mp4", "m4v", "mkv", "webm", "3gp", "mpeg", "mpg")
+        fun visit(directory: DocumentFile, depth: Int) {
+            if (depth > 12 || !directory.isDirectory) return
+            directory.listFiles().forEach { file ->
+                if (file.isDirectory) visit(file, depth + 1)
+                else if (file.isFile) {
+                    val name = file.name ?: return@forEach
+                    val ext = name.substringAfterLast('.', "").lowercase()
+                    val parent = file.parentFile?.name ?: root.name ?: "Pasta selecionada"
+                    val path = file.uri.toString()
+                    when (ext) {
+                        in audioExt -> audio += AudioTrack(
+                            title = name.substringBeforeLast('.'),
+                            artist = "Arquivo local",
+                            uri = file.uri,
+                            folderPath = "SAF: $parent",
+                            durationMs = 0L
+                        )
+                        in videoExt -> {
+                            val match = Regex("(?i)S(\\\\d{1,2})E(\\\\d{1,3})").find(name)
+                                ?: Regex("(?i)(\\\\d{1,2})x(\\\\d{1,3})").find(name)
+                            videos += VideoEntry(
+                                title = name.substringBeforeLast('.').replace(Regex("[._]+"), " "),
+                                uri = file.uri,
+                                folderPath = "SAF: $parent",
+                                folderName = parent,
+                                durationMs = 0L,
+                                sizeBytes = file.length(),
+                                season = match?.groupValues?.getOrNull(1)?.toIntOrNull(),
+                                episode = match?.groupValues?.getOrNull(2)?.toIntOrNull()
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        visit(root, 0)
+        return MediaSnapshot(audio, videos)
     }
 
     private fun normalizePath(path: String): String =
