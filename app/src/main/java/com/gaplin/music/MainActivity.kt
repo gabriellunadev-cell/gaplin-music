@@ -249,7 +249,7 @@ private fun SearchField(query: String, onChange: (String) -> Unit) {
 }
 
 @Composable
-private fun TrackList(tracks: List<Track>, selected: Track?, favorites: Set<String>, onClick: (Track) -> Unit, onFavorite: (Track) -> Unit) {
+private fun ColumnScope.TrackList(tracks: List<Track>, selected: Track?, favorites: Set<String>, onClick: (Track) -> Unit, onFavorite: (Track) -> Unit) {
     if (tracks.isEmpty()) EmptyState(Icons.Default.MusicNote, "Nenhuma faixa encontrada", "Adicione músicas ao aparelho e atualize sua biblioteca.")
     else LazyColumn(modifier = Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(5.dp), contentPadding = PaddingValues(bottom = 10.dp)) {
         items(tracks, key = { it.uri.toString() }) { track ->
