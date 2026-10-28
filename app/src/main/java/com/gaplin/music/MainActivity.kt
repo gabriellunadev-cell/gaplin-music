@@ -248,7 +248,21 @@ class MainActivity : ComponentActivity() {
                                         it.folderName.contains(search, true)
                                 }
                                 val grouped = filtered.groupBy { it.seriesName }
-                                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 14.dp)) {
+                                if (selectedSeries != null) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        IconButton(onClick = { selectedSeries = null }) {
+                                            Icon(Icons.Default.ArrowBack, null, tint = VioletSoft)
+                                        }
+                                        Text(selectedSeries!!, color = Color.White, fontWeight = FontWeight.Bold)
+                                    }
+                                    val episodes = catalog.videos.filter { it.seriesName == selectedSeries }
+                                        .sortedWith(compareBy<VideoEntry> { it.season ?: 0 }.thenBy { it.episode ?: 0 }.thenBy { it.title })
+                                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        items(episodes, key = { it.uri.toString() }) { video ->
+                                            VideoRow(video) { playVideo(video) }
+                                        }
+                                    }
+                                } else LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 14.dp)) {
                                     if (filtered.isNotEmpty()) {
                                         item { Text("BIBLIOTECA DE VÍDEOS", color = VioletSoft, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                                         items(filtered, key = { it.uri.toString() }) { video ->
