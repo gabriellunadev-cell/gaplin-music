@@ -355,13 +355,111 @@ class MainActivity : ComponentActivity() {
                                 onRefresh = ::scanLibrary
                             )
                             AppTab.MUSIC -> {
-                                ScreenHeading("Biblioteca musical", "${catalog.audio.size} faixas no dispositivo")
+                                ScreenHeading("Músicas", "${catalog.audio.size} faixas na sua biblioteca")
+                                Row(
+                                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(7.dp)
+                                ) {
+                                    listOf("Músicas", "Playlists", "Pastas", "Artistas", "Álbuns").forEach { section ->
+                                        Text(
+                                            section,
+                                            modifier = Modifier.clip(RoundedCornerShape(18.dp))
+                                                .background(if (musicSection == section) Violet.copy(alpha = .20f) else SurfaceDark)
+                                                .clickable {
+                                                    musicSection = section
+                                                    selectedMusicGroup = null
+                                                    selectedPlaylistId = null
+                                                }
+                                                .padding(horizontal = 14.dp, vertical = 9.dp),
+                                            color = if (musicSection == section) Color.White else TextMuted,
+                                            fontSize = 12.sp,
+                                            fontWeight = if (musicSection == section) FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    }
+                                }
                                 SearchBox(search) { search = it }
                                 val filtered = catalog.audio.filter {
                                     it.title.contains(search, true) || it.artist.contains(search, true) ||
-                                        it.folderPath.contains(search, true)
+                                        it.album.contains(search, true) || it.folderPath.contains(search, true)
                                 }
-                                AudioList(filtered, currentAudio, favoriteUris, { playAudio(it, filtered) }, ::toggleFavorite)
+                                val groupedTracks = when (musicSection) {
+                                    "Pastas" -> filtered.groupBy { it.folderPath }
+                                    "Artistas" -> filtered.groupBy { it.artist }
+                                    "Álbuns" -> filtered.groupBy { it.album }
+                                    else -> emptyMap()
+                                }
+                                when (musicSection) {
+                                    "Músicas" -> AudioList(
+                                        filtered, currentAudio, favoriteUris,
+                                        { playAudio(it, filtered) }, ::toggleFavorite
+                                    )
+                                    "Playlists" -> {
+                                        val selectedPlaylist = playlists.firstOrNull { it.id == selectedPlaylistId }
+                                        if (selectedPlaylist != null) {
+                                            val tracks = selectedPlaylist.trackUris.mapNotNull { uri ->
+                                                catalog.audio.firstOrNull { it.uri.toString() == uri }
+                                            }
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                IconButton(onClick = { selectedPlaylistId = null }) {
+                                                    Icon(Icons.Default.ArrowBack, null, tint = VioletSoft)
+                                                }
+                                                Column(Modifier.weight(1f)) {
+                                                    Text(selectedPlaylist.name, color = Color.White, fontWeight = FontWeight.Bold)
+                                                    Text("${tracks.size} faixas", color = TextMuted, fontSize = 11.sp)
+                                                }
+                                            }
+                                            AudioList(tracks, currentAudio, favoriteUris, { playAudio(it, tracks) }, ::toggleFavorite)
+                                        } else {
+                                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                                Text("Suas playlists", color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                                                FilledTonalButton(onClick = { newPlaylistName = ""; trackToAdd = null; showCreatePlaylist = true }) {
+                                                    Icon(Icons.Default.Add, null)
+                                                    Text("Criar")
+                                                }
+                                            }
+                                            if (playlists.isEmpty()) {
+                                                EmptyPanel(Icons.Default.QueueMusic, "Monte suas playlists", "Crie coleções locais com suas músicas favoritas.")
+                                            } else {
+                                                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
+                                                    items(playlists, key = { it.id }) { playlist ->
+                                                        val count = playlist.trackUris.count { uri -> catalog.audio.any { it.uri.toString() == uri } }
+                                                        PlaylistCard(playlist.name, count) { selectedPlaylistId = playlist.id }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    else -> {
+                                        if (selectedMusicGroup != null) {
+                                            val tracks = groupedTracks[selectedMusicGroup].orEmpty()
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                IconButton(onClick = { selectedMusicGroup = null }) {
+                                                    Icon(Icons.Default.ArrowBack, null, tint = VioletSoft)
+                                                }
+                                                Text(selectedMusicGroup!!, color = Color.White, fontWeight = FontWeight.Bold)
+                                            }
+                                            AudioList(tracks, currentAudio, favoriteUris, { playAudio(it, tracks) }, ::toggleFavorite)
+                                        } else if (groupedTracks.isEmpty()) {
+                                            EmptyPanel(Icons.Default.LibraryMusic, "Nada encontrado", "Adicione músicas à biblioteca e atualize a varredura.")
+                                        } else {
+                                            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
+                                                items(groupedTracks.keys.sortedBy { it.lowercase() }, key = { it }) { group ->
+                                                    MusicGroupCard(
+                                                        title = group.substringAfterLast('/'),
+                                                        subtitle = group.takeIf { musicSection == "Pastas" } ?: musicSection,
+                                                        count = groupedTracks[group].orEmpty().size,
+                                                        icon = when (musicSection) {
+                                                            "Pastas" -> Icons.Default.Folder
+                                                            "Artistas" -> Icons.Default.Person
+                                                            else -> Icons.Default.Album
+                                                        },
+                                                        onClick = { selectedMusicGroup = group }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             AppTab.FAVORITES -> {
                                 ScreenHeading("Sua coleção", "${favoriteUris.size} músicas salvas")
