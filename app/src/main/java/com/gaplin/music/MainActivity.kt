@@ -37,9 +37,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.MediaMetadata
@@ -694,22 +699,50 @@ class MainActivity : ComponentActivity() {
                                     decorFitsSystemWindows = false
                                 )
                             ) {
-                                AndroidView(
-                                    factory = { context ->
-                                        PlayerView(context).apply {
-                                            player = this@MainActivity.player
-                                            useController = true
-                                            setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
-                                            setKeepContentOnPlayerReset(true)
-                                            layoutParams = android.view.ViewGroup.LayoutParams(
-                                                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                                                android.view.ViewGroup.LayoutParams.MATCH_PARENT
-                                            )
+                                val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
+                                SideEffect {
+                                    dialogWindow?.let { window ->
+                                        WindowCompat.setDecorFitsSystemWindows(window, false)
+                                        WindowInsetsControllerCompat(window, window.decorView)
+                                            .hide(WindowInsetsCompat.Type.systemBars())
+                                    }
+                                }
+                                DisposableEffect(dialogWindow) {
+                                    onDispose {
+                                        dialogWindow?.let { window ->
+                                            WindowInsetsControllerCompat(window, window.decorView)
+                                                .show(WindowInsetsCompat.Type.systemBars())
                                         }
-                                    },
-                                    modifier = Modifier.fillMaxSize(),
-                                    update = { it.player = this@MainActivity.player }
-                                )
+                                    }
+                                }
+                                Box(Modifier.fillMaxSize().background(Color.Black)) {
+                                    AndroidView(
+                                        factory = { context ->
+                                            PlayerView(context).apply {
+                                                player = this@MainActivity.player
+                                                useController = true
+                                                setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                                                setKeepContentOnPlayerReset(true)
+                                                layoutParams = android.view.ViewGroup.LayoutParams(
+                                                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                                                    android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                                                )
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxSize(),
+                                        update = { it.player = this@MainActivity.player }
+                                    )
+                                    IconButton(
+                                        onClick = {
+                                            showFullscreenVideo = false
+                                            requestedOrientation = previousVideoOrientation
+                                        },
+                                        modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
+                                            .background(Color.Black.copy(alpha = .42f), RoundedCornerShape(50))
+                                    ) {
+                                        Icon(Icons.Default.Close, "Sair da tela cheia", tint = Color.White)
+                                    }
+                                }
                             }
                         }
                         Spacer(Modifier.height(8.dp))
