@@ -171,7 +171,8 @@ class MainActivity : ComponentActivity() {
                             .padding(horizontal = 18.dp)
                     ) {
                         TopBrand(onRefresh = ::scanLibrary)
-                        Box(Modifier.weight(1f).fillMaxWidth()) {\n                        when (activeTab) {
+                        Box(Modifier.weight(1f).fillMaxWidth()) {
+                        when (activeTab) {
                             AppTab.HOME -> HomeScreen(
                                 catalog = catalog,
                                 currentAudio = currentAudio,
@@ -255,7 +256,7 @@ class MainActivity : ComponentActivity() {
                                         }
                                         item { Text("COLEÇÕES / SÉRIES DETECTADAS", color = VioletSoft, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                                         items(grouped.keys.toList(), key = { "series:$it" }) { series ->
-                                            SeriesCard(series, grouped[series].orEmpty())
+                                            SeriesCard(series, grouped[series].orEmpty(), onClick = { selectedSeries = series })
                                         }
                                     } else item {
                                         EmptyPanel(
@@ -267,7 +268,9 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
-                        }\n\n                        if (currentVideo != null && showPlayer) {
+                        }
+
+                        if (currentVideo != null && showPlayer) {
                             VideoPlaybackPanel(
                                 player = player,
                                 title = currentVideo!!.title,
@@ -369,7 +372,8 @@ private fun HomeScreen(
                 Column {
                     Text("SEU UNIVERSO DE MÍDIA", color = VioletSoft, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
                     Spacer(Modifier.height(8.dp))
-                    Text("Música, filmes e séries.\nTudo em um só lugar.", color = Color.White, fontSize = 24.sp, lineHeight = 29.sp, fontWeight = FontWeight.Bold)
+                    Text("Música, filmes e séries.
+Tudo em um só lugar.", color = Color.White, fontSize = 24.sp, lineHeight = 29.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(8.dp))
                     Text("Organize sua biblioteca local com a experiência Gaplin.", color = Color(0xFFD0C5E0), fontSize = 12.sp)
                     Spacer(Modifier.height(14.dp))
