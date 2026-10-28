@@ -104,9 +104,7 @@ class MainActivity : ComponentActivity() {
                                 Text("GAPLIN", color = PurpleBright, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
                                 Text("MUSIC", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
                             }
-                            Surface(shape = CircleShape, color = PanelRaised, modifier = Modifier.size(44.dp)) {
-                                Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.GraphicEq, "Gaplin Music", tint = PurpleBright) }
-                            }
+                            GaplinLogoMark(Modifier.size(48.dp))
                         }
                         when (tab) {
                             MusicTab.HOME -> {
@@ -295,5 +293,42 @@ private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, ti
         Icon(icon, null, tint = Purple.copy(alpha = 0.8f), modifier = Modifier.size(38.dp))
         Spacer(Modifier.height(12.dp)); Text(title, color = Color.White, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(5.dp)); Text(message, color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
+    }
+}
+
+
+@Composable
+private fun GaplinLogoMark(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier) {
+        val stroke = androidx.compose.ui.graphics.drawscope.Stroke(
+            width = size.minDimension * 0.105f,
+            cap = androidx.compose.ui.graphics.StrokeCap.Round
+        )
+        val inset = size.minDimension * 0.13f
+        val arcSize = androidx.compose.ui.geometry.Size(size.width - inset * 2, size.height - inset * 2)
+        drawArc(
+            brush = Brush.sweepGradient(listOf(PurpleBright, Purple, Blue, PurpleBright)),
+            startAngle = 42f,
+            sweepAngle = 278f,
+            useCenter = false,
+            topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
+            size = arcSize,
+            style = stroke
+        )
+        val centerY = size.height * 0.52f
+        val startX = size.width * 0.47f
+        val barWidth = size.width * 0.065f
+        val gap = size.width * 0.105f
+        val heights = listOf(0.20f, 0.34f, 0.48f, 0.31f)
+        heights.forEachIndexed { index, fraction ->
+            val x = startX + index * gap
+            drawLine(
+                color = if (index % 2 == 0) Blue else PurpleBright,
+                start = androidx.compose.ui.geometry.Offset(x, centerY - size.height * fraction / 2),
+                end = androidx.compose.ui.geometry.Offset(x, centerY + size.height * fraction / 2),
+                strokeWidth = barWidth,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+        }
     }
 }
