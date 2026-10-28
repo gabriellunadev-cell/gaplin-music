@@ -159,7 +159,6 @@ object MediaCatalog {
                     val name = file.name ?: return@forEach
                     val ext = name.substringAfterLast('.', "").lowercase()
                     val parent = file.parentFile?.name ?: root.name ?: "Pasta selecionada"
-                    val path = file.uri.toString()
                     when (ext) {
                         in audioExt -> audio += AudioTrack(
                             title = name.substringBeforeLast('.'),
@@ -169,8 +168,8 @@ object MediaCatalog {
                             durationMs = 0L
                         )
                         in videoExt -> {
-                            val match = Regex("(?i)S(\\\\d{1,2})E(\\\\d{1,3})").find(name)
-                                ?: Regex("(?i)(\\\\d{1,2})x(\\\\d{1,3})").find(name)
+                            val match = Regex("(?i)S(\\d{1,2})E(\\d{1,3})").find(name)
+                                ?: Regex("(?i)(\\d{1,2})x(\\d{1,3})").find(name)
                             videos += VideoEntry(
                                 title = name.substringBeforeLast('.').replace(Regex("[._]+"), " "),
                                 uri = file.uri,
