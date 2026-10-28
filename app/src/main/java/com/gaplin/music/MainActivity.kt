@@ -2,6 +2,7 @@ package com.gaplin.music
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.content.pm.ActivityInfo
 import android.os.Build
 import android.net.Uri
 import android.os.Bundle
@@ -28,6 +29,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -93,6 +96,7 @@ class MainActivity : ComponentActivity() {
             var selectedSeries by remember { mutableStateOf<String?>(null) }
             var videoMode by remember { mutableStateOf(false) }
             var showPlayer by remember { mutableStateOf(false) }
+            var showFullscreenVideo by remember { mutableStateOf(false) }
 
             fun scanLibrary() {
                 val indexed = MediaCatalog.scan(this)
@@ -344,7 +348,11 @@ class MainActivity : ComponentActivity() {
                             VideoPlaybackPanel(
                                 player = player,
                                 title = currentVideo!!.title,
-                                onClose = { player.pause(); showPlayer = false }
+                                onClose = { player.pause(); showPlayer = false },
+                                onFullscreen = {
+                                    requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                                    showFullscreenVideo = true
+                                }
                             )
                         } else if (currentAudio != null) {
                             MiniPlayer(
@@ -354,6 +362,35 @@ class MainActivity : ComponentActivity() {
                                 onToggle = { if (player.isPlaying) player.pause() else player.play() },
                                 onNext = { if (player.hasNextMediaItem()) player.seekToNextMediaItem() }
                             )
+                        }
+                        if (showFullscreenVideo && currentVideo != null) {
+                            Dialog(
+                                onDismissRequest = {
+                                    showFullscreenVideo = false
+                                    requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                                },
+                                properties = DialogProperties(
+                                    usePlatformDefaultWidth = false,
+                                    decorFitsSystemWindows = false
+                                )
+                            ) {
+                                AndroidView(
+                                    factory = { context ->
+                                        PlayerView(context).apply {
+                                            player = this@MainActivity.player
+                                            useController = true
+                                            setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                                            setKeepContentOnPlayerReset(true)
+                                            layoutParams = android.view.ViewGroup.LayoutParams(
+                                                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                                                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                                            )
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxSize(),
+                                    update = { it.player = this@MainActivity.player }
+                                )
+                            }
                         }
                         Spacer(Modifier.height(8.dp))
                     }
@@ -652,10 +689,11 @@ private fun MiniPlayer(title: String, subtitle: String, playing: Boolean, onTogg
 }
 
 @Composable
-private fun VideoPlaybackPanel(player: ExoPlayer, title: String, onClose: () -> Unit) {
+private fun VideoPlaybackPanel(player: ExoPlayer, title: String, onClose: () -> Unit, onFullscreen: () -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SurfaceDark)) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, color = Color.White, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp)
+            IconButton(onClick = onFullscreen) { Icon(Icons.Default.Fullscreen, "Tela cheia", tint = VioletSoft) }
             IconButton(onClick = onClose) { Icon(Icons.Default.Close, null, tint = VioletSoft) }
         }
         AndroidView(
