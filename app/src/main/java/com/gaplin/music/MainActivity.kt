@@ -616,6 +616,73 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         }
+                        if (showPlaylistPicker && trackToAdd != null) {
+                            AlertDialog(
+                                onDismissRequest = { showPlaylistPicker = false; trackToAdd = null },
+                                title = { Text("Adicionar à playlist") },
+                                text = {
+                                    if (playlists.isEmpty()) {
+                                        Text("Você ainda não criou playlists.")
+                                    } else {
+                                        Column {
+                                            playlists.forEach { playlist ->
+                                                TextButton(
+                                                    onClick = {
+                                                        addTrackToPlaylist(playlist.id, trackToAdd!!)
+                                                        showPlaylistPicker = false
+                                                        trackToAdd = null
+                                                    },
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    Text(playlist.name, modifier = Modifier.weight(1f))
+                                                    Text("${playlist.trackUris.size} faixas", color = TextMuted, fontSize = 11.sp)
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        showPlaylistPicker = false
+                                        newPlaylistName = ""
+                                        showCreatePlaylist = true
+                                    }) { Text("Nova playlist") }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showPlaylistPicker = false; trackToAdd = null }) { Text("Fechar") }
+                                }
+                            )
+                        }
+
+                        if (showCreatePlaylist) {
+                            AlertDialog(
+                                onDismissRequest = { showCreatePlaylist = false; trackToAdd = null },
+                                title = { Text("Criar playlist") },
+                                text = {
+                                    OutlinedTextField(
+                                        value = newPlaylistName,
+                                        onValueChange = { newPlaylistName = it.take(40) },
+                                        label = { Text("Nome da playlist") },
+                                        singleLine = true
+                                    )
+                                },
+                                confirmButton = {
+                                    TextButton(
+                                        enabled = newPlaylistName.isNotBlank(),
+                                        onClick = {
+                                            createPlaylist(newPlaylistName, trackToAdd)
+                                            newPlaylistName = ""
+                                            trackToAdd = null
+                                            showCreatePlaylist = false
+                                        }
+                                    ) { Text("Criar") }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showCreatePlaylist = false; trackToAdd = null }) { Text("Cancelar") }
+                                }
+                            )
+                        }
+
                         if (showFullscreenVideo && currentVideo != null && playerReady) {
                             Dialog(
                                 onDismissRequest = {
@@ -959,6 +1026,54 @@ private fun SeriesCard(name: String, episodes: List<VideoEntry>, onClick: () -> 
 }
 
 @Composable
+private fun MusicGroupCard(
+    title: String,
+    subtitle: String,
+    count: Int,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(17.dp)).background(SurfaceDark)
+            .clickable(onClick = onClick).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(48.dp).clip(RoundedCornerShape(13.dp))
+            .background(Brush.linearGradient(listOf(Color(0xFF38236C), Color(0xFF12345E)))),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, null, tint = VioletSoft, modifier = Modifier.size(24.dp))
+        }
+        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+            Text(title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("$count faixas · $subtitle", color = TextMuted, fontSize = 11.sp, maxLines = 1)
+        }
+        Icon(Icons.Default.ChevronRight, null, tint = TextMuted)
+    }
+}
+
+@Composable
+private fun PlaylistCard(name: String, count: Int, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(17.dp)).background(SurfaceDark)
+            .clickable(onClick = onClick).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(48.dp).clip(RoundedCornerShape(13.dp))
+            .background(Brush.linearGradient(listOf(Color(0xFF6C247D), Color(0xFF1B3572)))),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.QueueMusic, null, tint = Color.White, modifier = Modifier.size(25.dp))
+        }
+        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+            Text(name, color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text("$count músicas", color = TextMuted, fontSize = 11.sp)
+        }
+        Icon(Icons.Default.ChevronRight, null, tint = TextMuted)
+    }
+}
+
+@Composable
 private fun FolderCard(path: String, count: Int, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(SurfaceDark)
@@ -1037,6 +1152,7 @@ private fun NowPlayingDialog(
     queue: List<AudioTrack>,
     favorite: Boolean,
     onFavorite: () -> Unit,
+    onAddToPlaylist: () -> Unit,
     onDismiss: () -> Unit
 ) {
     var position by remember(track.uri) { mutableStateOf(0L) }
@@ -1187,6 +1303,11 @@ private fun NowPlayingDialog(
                 }
 
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    TextButton(onClick = onAddToPlaylist) {
+                        Icon(Icons.Default.PlaylistAdd, null, tint = VioletSoft)
+                        Spacer(Modifier.width(5.dp))
+                        Text("Playlist", color = Color.White, fontSize = 11.sp)
+                    }
                     TextButton(onClick = { showTimer = true }) {
                         Icon(Icons.Default.Timer, null, tint = VioletSoft)
                         Spacer(Modifier.width(5.dp))
@@ -1244,7 +1365,6 @@ private fun NowPlayingDialog(
                     timerJob = scope.launch {
                         delay(minutes * 60_000L)
                         player.pause()
-                        playerReadyNoop()
                     }
                     showTimer = false
                 }) { Text("Iniciar") }
@@ -1259,8 +1379,6 @@ private fun NowPlayingDialog(
         )
     }
 }
-
-private fun playerReadyNoop() = Unit
 
 @Composable
 private fun VideoPlaybackPanel(player: Player, title: String, onClose: () -> Unit, onFullscreen: () -> Unit) {
