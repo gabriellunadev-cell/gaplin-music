@@ -421,7 +421,12 @@ class FileManagerActivity : ComponentActivity() {
                 mediaDeleteCallback = onSuccess
                 systemDeleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
             } catch (_: Exception) {
-                statusMessage = "O Android não conseguiu abrir a autorização de exclusão. Os arquivos originais foram mantidos."
+                statusMessage = if (isMove) {
+                    "A cópia foi criada, mas o Android não abriu a autorização para apagar a origem. Os dois arquivos foram mantidos."
+                } else {
+                    "O Android não conseguiu abrir a autorização de exclusão. Os arquivos originais foram mantidos."
+                }
+                pendingMediaDeleteIsMove = false
                 scanFiles()
             }
         } else {
@@ -484,13 +489,15 @@ class FileManagerActivity : ComponentActivity() {
                 IntentSenderRequest.Builder(error.userAction.actionIntent.intentSender).build()
             )
         } catch (_: SecurityException) {
+            val alreadyDeleted = legacyDeleteQueue.take(legacyDeleteIndex)
+            val deletedCount = legacyDeleteIndex
+            cleanupLocalReferences(alreadyDeleted)
             legacyDeleteQueue = emptyList()
             legacyDeleteIndex = 0
             legacyDeleteCallback = null
-            val alreadyDeleted = legacyDeleteQueue.take(legacyDeleteIndex)
-            cleanupLocalReferences(alreadyDeleted)
-            statusMessage = if (legacyDeleteIndex > 0) {
-                "$legacyDeleteIndex arquivo(s) foram excluídos antes da falha. Os demais foram mantidos."
+            pendingMediaDeleteIsMove = false
+            statusMessage = if (deletedCount > 0) {
+                "$deletedCount arquivo(s) foram excluídos antes da falha. Os demais foram mantidos."
             } else if (legacyDeleteIsMove) {
                 "A cópia no destino foi mantida, mas o Android não autorizou excluir os originais."
             } else {
