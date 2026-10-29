@@ -100,6 +100,8 @@ class MainActivity : ComponentActivity() {
     private var audioPermission by mutableStateOf(false)
     private var videoPermission by mutableStateOf(false)
     private var spectrumPermissionGranted by mutableStateOf(false)
+    private var playbackAudioSessionId by mutableIntStateOf(0)
+    private var mediaControllerExtrasListener: MediaController.Listener? = null
     private var mediaRefreshToken by mutableStateOf(0)
     private var selectedTreeUri by mutableStateOf<Uri?>(null)
 
@@ -172,7 +174,6 @@ class MainActivity : ComponentActivity() {
             var previousVideoOrientation by remember { mutableStateOf(requestedOrientation) }
             var fullscreenVideoLandscape by remember { mutableStateOf(false) }
             var playbackError by remember { mutableStateOf<String?>(null) }
-            var audioSessionId by remember { mutableIntStateOf(0) }
             var equalizerSnapshot by remember { mutableStateOf(AudioEqualizerController.snapshot()) }
             var scanError by remember { mutableStateOf<String?>(null) }
             var scanInProgress by remember { mutableStateOf(false) }
@@ -220,8 +221,10 @@ class MainActivity : ComponentActivity() {
                 val listener = object : Player.Listener {
                     @OptIn(UnstableApi::class)
                     override fun onAudioSessionIdChanged(newAudioSessionId: Int) {
-                        audioSessionId = newAudioSessionId
-                        equalizerSnapshot = AudioEqualizerController.attach(this@MainActivity, newAudioSessionId)
+                        if (newAudioSessionId > 0) {
+                            playbackAudioSessionId = newAudioSessionId
+                            equalizerSnapshot = AudioEqualizerController.attach(this@MainActivity, newAudioSessionId)
+                        }
                     }
                     override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
                     override fun onPlaybackStateChanged(playbackState: Int) {
@@ -685,7 +688,7 @@ class MainActivity : ComponentActivity() {
                                     onStartTimer = ::startSleepTimer,
                                     onCancelTimer = ::cancelSleepTimer,
                                     onDismiss = { showMusicPlayer = false },
-                                    audioSessionId = audioSessionId,
+                                    audioSessionId = playbackAudioSessionId,
                                     spectrumPermissionGranted = spectrumPermissionGranted,
                                     equalizer = equalizerSnapshot,
                                     onRequestSpectrumPermission = ::requestSpectrumPermission,
@@ -877,6 +880,22 @@ class MainActivity : ComponentActivity() {
             if (isDestroyed) return@addListener
             try {
                 player = future.get()
+                val extrasListener = object : MediaController.Listener {
+                    override fun onExtrasChanged(controller: MediaController, extras: Bundle) {
+                        val sessionId = extras.getInt(PlaybackSessionKeys.AUDIO_SESSION_ID, 0)
+                        if (sessionId > 0) {
+                            playbackAudioSessionId = sessionId
+                            equalizerSnapshot = AudioEqualizerController.attach(this@MainActivity, sessionId)
+                        }
+                    }
+                }
+                mediaControllerExtrasListener = extrasListener
+                player.addListener(extrasListener)
+                playbackAudioSessionId = player.sessionExtras
+                    .getInt(PlaybackSessionKeys.AUDIO_SESSION_ID, 0)
+                if (playbackAudioSessionId > 0) {
+                    equalizerSnapshot = AudioEqualizerController.attach(this@MainActivity, playbackAudioSessionId)
+                }
                 playerReady = true
             } catch (_: Exception) {
                 playerReady = false
@@ -970,6 +989,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        if (::player.isInitialized) {
+            mediaControllerExtrasListener?.let { player.removeListener(it) }
+        }
+        mediaControllerExtrasListener = null
         controllerFuture?.let { MediaController.releaseFuture(it) }
         controllerFuture = null
         super.onDestroy()
