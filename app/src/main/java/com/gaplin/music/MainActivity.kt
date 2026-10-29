@@ -1312,7 +1312,9 @@ private fun NowPlayingDialog(
             )
         ) {
             Column(
-                Modifier.fillMaxSize().padding(horizontal = 22.dp, vertical = 16.dp),
+                Modifier.fillMaxSize()
+                    .padding(horizontal = 22.dp, vertical = 16.dp)
+                    .navigationBarsPadding(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
