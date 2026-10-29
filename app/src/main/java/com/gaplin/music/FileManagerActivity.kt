@@ -3,6 +3,7 @@ package com.gaplin.music
 import android.Manifest
 import android.app.RecoverableSecurityException
 import android.content.pm.PackageManager
+import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -165,6 +166,7 @@ class FileManagerActivity : ComponentActivity() {
                             filter = it
                             selectedUris = emptySet()
                         },
+                        onOpenFile = { file -> openManagedFile(file) },
                         onToggleSelection = { file ->
                             selectedUris = if (file.stableId in selectedUris) {
                                 selectedUris - file.stableId
@@ -231,6 +233,28 @@ class FileManagerActivity : ComponentActivity() {
             }
         }
         requestMissingPermissions()
+    }
+
+
+    private fun openManagedFile(file: ManagedMediaFile) {
+        val mimeType = when (file.kind) {
+            ManagedMediaKind.AUDIO -> "audio/*"
+            ManagedMediaKind.VIDEO -> "video/*"
+            ManagedMediaKind.IMAGE -> "image/*"
+        }
+        val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(file.uri, mimeType)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            if (viewIntent.resolveActivity(packageManager) != null) {
+                startActivity(Intent.createChooser(viewIntent, "Abrir arquivo"))
+            } else {
+                statusMessage = "Não há aplicativo instalado para abrir este tipo de arquivo."
+            }
+        } catch (_: Exception) {
+            statusMessage = "Não foi possível abrir este arquivo. Verifique se ele ainda existe e se o aplicativo tem acesso."
+        }
     }
 
     private fun refreshPermissions() {
