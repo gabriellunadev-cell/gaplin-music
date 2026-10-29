@@ -45,6 +45,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 private val DownloadAccent = Color(0xFFB88AFF)
 private val DownloadAccentDeep = Color(0xFF7D4DCE)
@@ -89,6 +91,7 @@ fun DownloadsScreen(
     var downloadMessage by remember { mutableStateOf<String?>(null) }
     var downloaded by remember { mutableStateOf<List<DownloadedMedia>>(emptyList()) }
     val tasks = remember { mutableStateListOf<DownloadUiTask>() }
+    val downloadMutex = remember { Mutex() }
 
     LaunchedEffect(manager) {
         try {
@@ -147,12 +150,19 @@ fun DownloadsScreen(
             downloadMessage = engineError ?: "O motor de downloads ainda está iniciando."
             return
         }
-        if (downloading) {
-            downloadMessage = "Aguarde o download atual terminar para iniciar outro."
-            return
-        }
         if (item.kind == RemoteMediaKind.CHANNEL) {
             downloadMessage = "Abra um vídeo ou uma playlist do canal para baixar."
+            return
+        }
+
+        val duplicate = tasks.any { task ->
+            task.source.url == item.url &&
+                task.audioOnly == audioOnly &&
+                task.status in setOf("Na fila", "Preparando", "Baixando", "Concluído")
+        }
+        if (duplicate) {
+            downloadMessage = "Este conteúdo já está na fila ou foi baixado nesta sessão."
+            selectedSection = "Fila"
             return
         }
 
@@ -163,52 +173,60 @@ fun DownloadsScreen(
                 title = item.title,
                 source = item,
                 audioOnly = audioOnly,
-                status = "Preparando"
+                status = "Na fila"
             )
         )
         selectedResult = null
         selectedSection = "Fila"
-        downloading = true
-        downloadMessage = null
+        downloadMessage = "Adicionado à fila de downloads."
 
+        // Downloads run one at a time. The Mutex preserves FIFO order and avoids
+        // racing the embedded Python runtime or publishing files concurrently.
         scope.launch {
-            try {
-                val files = manager.download(item, audioOnly) { progress, eta ->
-                    mainHandler.post {
-                        val index = tasks.indexOfFirst { it.id == taskId }
-                        if (index >= 0) {
-                            tasks[index] = tasks[index].copy(
-                                progress = progress,
-                                etaSeconds = eta,
-                                status = "Baixando"
-                            )
+            downloadMutex.withLock {
+                val queuedIndex = tasks.indexOfFirst { it.id == taskId }
+                if (queuedIndex >= 0) {
+                    tasks[queuedIndex] = tasks[queuedIndex].copy(status = "Preparando")
+                }
+                downloading = true
+                try {
+                    val files = manager.download(item, audioOnly) { progress, eta ->
+                        mainHandler.post {
+                            val index = tasks.indexOfFirst { it.id == taskId }
+                            if (index >= 0) {
+                                tasks[index] = tasks[index].copy(
+                                    progress = progress,
+                                    etaSeconds = eta,
+                                    status = "Baixando"
+                                )
+                            }
                         }
                     }
+                    downloaded = manager.listDownloaded()
+                    val index = tasks.indexOfFirst { it.id == taskId }
+                    if (index >= 0) {
+                        tasks[index] = tasks[index].copy(
+                            progress = 100f,
+                            etaSeconds = 0L,
+                            status = "Concluído"
+                        )
+                    }
+                    downloadMessage = if (files.size == 1) {
+                        "Download concluído: " + files.first().fileName
+                    } else {
+                        files.size.toString() + " arquivos adicionados à pasta Downloads/Gaplin Music."
+                    }
+                    onLibraryRefresh()
+                } catch (error: Exception) {
+                    val message = error.message ?: "Falha ao baixar esta mídia."
+                    val index = tasks.indexOfFirst { it.id == taskId }
+                    if (index >= 0) {
+                        tasks[index] = tasks[index].copy(status = "Falhou", error = message)
+                    }
+                    downloadMessage = message
+                } finally {
+                    downloading = false
                 }
-                downloaded = manager.listDownloaded()
-                val index = tasks.indexOfFirst { it.id == taskId }
-                if (index >= 0) {
-                    tasks[index] = tasks[index].copy(
-                        progress = 100f,
-                        etaSeconds = 0L,
-                        status = "Concluído"
-                    )
-                }
-                downloadMessage = if (files.size == 1) {
-                    "Download concluído: " + files.first().fileName
-                } else {
-                    files.size.toString() + " arquivos adicionados à pasta Downloads/Gaplin Music."
-                }
-                onLibraryRefresh()
-            } catch (error: Exception) {
-                val message = error.message ?: "Falha ao baixar esta mídia."
-                val index = tasks.indexOfFirst { it.id == taskId }
-                if (index >= 0) {
-                    tasks[index] = tasks[index].copy(status = "Falhou", error = message)
-                }
-                downloadMessage = message
-            } finally {
-                downloading = false
             }
         }
     }
@@ -541,14 +559,14 @@ private fun DownloadDetail(
         } else {
             Button(
                 onClick = onDownloadVideo,
-                enabled = engineReady && !downloading,
+                enabled = engineReady,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = DownloadAccentDeep, contentColor = Color.White)
             ) {
                 Icon(Icons.Default.Download, null)
                 Spacer(Modifier.width(8.dp))
-                Text(if (downloading) "Download em andamento" else if (item.kind == RemoteMediaKind.PLAYLIST) "Baixar playlist" else "Baixar vídeo", fontWeight = FontWeight.Bold)
+                Text(if (downloading) "Adicionar à fila" else if (item.kind == RemoteMediaKind.PLAYLIST) "Baixar playlist" else "Baixar vídeo", fontWeight = FontWeight.Bold)
             }
             OutlinedButton(
                 onClick = onDownloadAudio,
@@ -559,7 +577,7 @@ private fun DownloadDetail(
             ) {
                 Icon(Icons.Default.Headphones, null)
                 Spacer(Modifier.width(8.dp))
-                Text("Baixar somente áudio")
+                Text(if (downloading) "Adicionar áudio à fila" else "Baixar somente áudio")
             }
             Text(
                 "O áudio é salvo no formato original disponível (por exemplo, M4A ou WebM), sem conversão. Qualidade e formatos dependem da fonte.",
