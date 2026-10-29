@@ -57,12 +57,9 @@ class YtDlpDownloadManager(context: Context) {
         val probe = ProcessBuilder(executable.absolutePath, "--version")
             .redirectErrorStream(true)
             .start()
-        if (!probe.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)) {
-            probe.destroyForcibly()
-            throw IllegalStateException("O runtime JavaScript QuickJS não respondeu ao teste de inicialização.")
-        }
+        val exitCode = probe.waitFor()
         val output = probe.inputStream.bufferedReader().use { it.readText() }.trim()
-        if (probe.exitValue() != 0 || output.isBlank()) {
+        if (exitCode != 0 || output.isBlank()) {
             throw IllegalStateException("O runtime QuickJS não conseguiu iniciar neste aparelho: ${output.take(220)}")
         }
         quickJsVersion = output.lineSequence().first().take(60)
