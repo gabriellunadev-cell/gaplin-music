@@ -80,7 +80,8 @@ class AudioSpectrumCapture(
             val startBin = exp(minLog + (maxLog - minLog) * startPosition).toInt().coerceIn(1, maxBin)
             val endBin = ceil(exp(minLog + (maxLog - minLog) * endPosition)).toInt().coerceIn(startBin + 1, maxBin + 1)
 
-            var energy = 0.0
+            var energySquared = 0.0
+            var peak = 0.0
             var samples = 0
             for (bin in startBin until endBin) {
                 val realIndex = bin * 2
@@ -88,15 +89,25 @@ class AudioSpectrumCapture(
                 if (imagIndex >= fft.size) break
                 val real = fft[realIndex].toInt()
                 val imaginary = fft[imagIndex].toInt()
-                energy += sqrt((real * real + imaginary * imaginary).toDouble())
+                val magnitude = sqrt((real * real + imaginary * imaginary).toDouble())
+                energySquared += magnitude * magnitude
+                peak = maxOf(peak, magnitude)
                 samples++
             }
 
-            val average = if (samples > 0) energy / samples else 0.0
-            // Log compression makes quiet details visible without flattening transient peaks.
-            val normalized = (ln(1.0 + average * 1.8) / ln(1.0 + 180.0)).toFloat().coerceIn(0f, 1f)
-            val boosted = (normalized * 1.32f).coerceIn(0f, 1f)
-            smoothed[band] = smoothed[band] * 0.60f + boosted * 0.40f
+            val rms = if (samples > 0) sqrt(energySquared / samples) else 0.0
+            val measured = peak * 0.62 + rms * 0.38
+            // Calibrated for the 8-bit magnitude range returned by Android Visualizer.
+            // Faster attack and slower release make kicks/snare transients visibly react.
+            val normalized = (ln(1.0 + measured * 2.2) / ln(1.0 + 58.0 * 2.2))
+                .toFloat().coerceIn(0f, 1f)
+            val boosted = (normalized * 1.85f).coerceIn(0f, 1f)
+            val previous = smoothed[band]
+            smoothed[band] = if (boosted > previous) {
+                previous * 0.22f + boosted * 0.78f
+            } else {
+                previous * 0.76f + boosted * 0.24f
+            }
             output[band] = smoothed[band]
         }
         return output
