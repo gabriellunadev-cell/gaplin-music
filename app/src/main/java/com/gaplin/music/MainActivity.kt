@@ -3,9 +3,12 @@ package com.gaplin.music
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.content.ComponentName
 import android.content.pm.ActivityInfo
 import android.os.Build
+import android.os.CancellationSignal
+import android.util.Size
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -1134,15 +1137,90 @@ private fun VideoRow(video: VideoEntry, onPlay: () -> Unit) {
             .clickable(onClick = onPlay).padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(76.dp, 58.dp).clip(RoundedCornerShape(11.dp)).background(SurfaceRaised), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.PlayCircleFilled, null, tint = VioletSoft, modifier = Modifier.size(30.dp))
-        }
+        VideoArtwork(video, Modifier.size(116.dp, 72.dp).clip(RoundedCornerShape(11.dp)))
         Column(Modifier.weight(1f).padding(horizontal = 11.dp)) {
             Text(video.title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(video.folderName, color = TextMuted, fontSize = 11.sp, maxLines = 1)
             Text(formatDuration(video.durationMs), color = VioletSoft, fontSize = 10.sp)
         }
         Icon(Icons.Default.PlayArrow, null, tint = VioletSoft)
+    }
+}
+
+@Composable
+private fun VideoArtwork(video: VideoEntry, modifier: Modifier = Modifier) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var artwork by remember(video.uri) { mutableStateOf<ImageBitmap?>(null) }
+
+    LaunchedEffect(video.uri) {
+        artwork = withContext(Dispatchers.IO) {
+            val thumbnail = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                runCatching {
+                    context.contentResolver.loadThumbnail(
+                        video.uri,
+                        Size(480, 270),
+                        CancellationSignal()
+                    )
+                }.getOrNull()
+            } else null
+
+            val frame = thumbnail ?: runCatching {
+                val retriever = MediaMetadataRetriever()
+                try {
+                    retriever.setDataSource(context, video.uri)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                        retriever.getScaledFrameAtTime(
+                            1_000_000L,
+                            MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+                            480,
+                            270
+                        ) ?: retriever.frameAtTime
+                    } else {
+                        retriever.frameAtTime
+                    }
+                } finally {
+                    retriever.release()
+                }
+            }.getOrNull()
+
+            frame?.asImageBitmap()
+        }
+    }
+
+    Box(
+        modifier.background(
+            Brush.linearGradient(listOf(Color(0xFF1B3565), Color(0xFF35205F)))
+        ),
+        contentAlignment = Alignment.Center
+    ) {
+        artwork?.let {
+            Image(
+                bitmap = it,
+                contentDescription = "Capa do vídeo: ${video.title}",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        } ?: Icon(
+            Icons.Default.VideoLibrary,
+            contentDescription = null,
+            tint = VioletSoft,
+            modifier = Modifier.size(30.dp)
+        )
+
+        Box(
+            Modifier.align(Alignment.Center)
+                .size(30.dp)
+                .clip(RoundedCornerShape(50))
+                .background(Color.Black.copy(alpha = 0.48f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.PlayArrow,
+                contentDescription = "Reproduzir vídeo",
+                tint = Color.White,
+                modifier = Modifier.size(21.dp)
+            )
+        }
     }
 }
 
