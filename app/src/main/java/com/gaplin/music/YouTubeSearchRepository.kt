@@ -56,11 +56,10 @@ object YouTubeSearchRepository {
     }
 
     private fun extractInitialData(html: String): JSONObject {
-        // YouTube can inject unrelated inline scripts between its bootstrap data
-        // and other JSON blocks. Only parse an object immediately following an
-        // actual ytInitialData assignment.
+        // Parse only JSON that immediately follows a real ytInitialData assignment.
+        // Other inline scripts can contain unrelated JavaScript objects.
         val assignment = Regex(
-            """(?:var\\s+ytInitialData|let\\s+ytInitialData|const\\s+ytInitialData|window\\[\"ytInitialData\"\\]|window\\['ytInitialData'\\]|ytInitialData)\\s*="""
+            """(?:var\s+ytInitialData|let\s+ytInitialData|const\s+ytInitialData|window\["ytInitialData"\]|window\['ytInitialData'\]|ytInitialData)\s*="""
         )
         val matches = assignment.findAll(html).toList()
         for (match in matches) {
@@ -76,7 +75,7 @@ object YouTubeSearchRepository {
                 if (inString) {
                     when {
                         escaped -> escaped = false
-                        char == '\\\\' -> escaped = true
+                        char == '\\' -> escaped = true
                         char == '"' -> inString = false
                     }
                 } else {
