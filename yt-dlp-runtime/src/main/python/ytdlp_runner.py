@@ -6,6 +6,7 @@ unsupported option is silently discarded.
 """
 import json
 import os
+from importlib.metadata import PackageNotFoundError, version as package_version
 import yt_dlp
 from yt_dlp.version import __version__ as YT_DLP_VERSION
 
@@ -38,6 +39,14 @@ def configure_js_runtime(executable_path):
     path = os.path.abspath(str(executable_path))
     if not os.path.isfile(path) or not os.access(path, os.X_OK):
         raise RuntimeError("The packaged QuickJS runtime is missing or not executable")
+    try:
+        ejs_version = package_version("yt-dlp-ejs")
+    except PackageNotFoundError as error:
+        raise RuntimeError("The yt-dlp-ejs challenge solver package is missing from this APK") from error
+    if ejs_version != "0.8.0":
+        raise RuntimeError(
+            "Incompatible yt-dlp-ejs package: expected 0.8.0, found " + ejs_version
+        )
     _JS_RUNTIME_PATH = path
     return path
 
@@ -120,7 +129,11 @@ def _progress_hook(progress_callback):
 
 
 def get_version():
-    return YT_DLP_VERSION
+    try:
+        ejs_version = package_version('yt-dlp-ejs')
+    except PackageNotFoundError:
+        ejs_version = 'ausente'
+    return YT_DLP_VERSION + ' + yt-dlp-ejs ' + ejs_version
 
 
 def execute(url, output_template, cli_flags, progress_callback=None):
