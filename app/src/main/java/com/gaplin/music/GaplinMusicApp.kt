@@ -2,7 +2,7 @@ package com.gaplin.music
 
 import android.app.Application
 import android.util.Log
-import com.yausername.youtubedl_android.FFmpeg
+import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 
 class GaplinMusicApp : Application() {
