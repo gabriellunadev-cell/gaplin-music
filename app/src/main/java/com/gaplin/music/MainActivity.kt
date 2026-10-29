@@ -88,7 +88,8 @@ private val TextMuted = Color(0xFF8798BD)
 private data class LocalPlaylist(val id: String, val name: String, val trackUris: List<String>)
 
 private enum class AppTab(val label: String) {
-    HOME("Início"), MUSIC("Música"), FILES("Pastas"), FAVORITES("Favoritos"), VIDEOS("Vídeo"), MORE("Mais")
+    HOME("Início"), MUSIC("Música"), FILES("Pastas"), FAVORITES("Favoritos"),
+    VIDEOS("Vídeo"), DOWNLOADS("Downloads"), MORE("Mais")
 }
 
 class MainActivity : ComponentActivity() {
@@ -366,7 +367,7 @@ class MainActivity : ComponentActivity() {
                     },
                     bottomBar = {
                         NavigationBar(containerColor = Color(0xFF08142F), tonalElevation = 0.dp) {
-                            listOf(AppTab.MUSIC, AppTab.VIDEOS, AppTab.MORE).forEach { tab ->
+                            listOf(AppTab.MUSIC, AppTab.VIDEOS, AppTab.DOWNLOADS, AppTab.MORE).forEach { tab ->
                                 val moreSelected = activeTab in setOf(AppTab.HOME, AppTab.FILES, AppTab.FAVORITES, AppTab.MORE)
                                 NavigationBarItem(
                                     selected = if (tab == AppTab.MORE) moreSelected else activeTab == tab,
@@ -383,6 +384,7 @@ class MainActivity : ComponentActivity() {
                                             when (tab) {
                                                 AppTab.MUSIC -> Icons.Default.MusicNote
                                                 AppTab.VIDEOS -> Icons.Default.VideoLibrary
+                                                AppTab.DOWNLOADS -> Icons.Default.Download
                                                 else -> Icons.Default.MoreHoriz
                                             }, contentDescription = tab.label
                                         )
@@ -596,6 +598,9 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             }
+                            AppTab.DOWNLOADS -> DownloadCenterScreen(
+                                onRefreshLibrary = ::scanLibrary
+                            )
                             AppTab.MORE -> MoreScreen(
                                 onHome = { activeTab = AppTab.HOME },
                                 onFolders = { activeTab = AppTab.FILES },
