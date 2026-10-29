@@ -261,8 +261,10 @@ object FileManagerRepository {
             val copiedBytes = input.use { source ->
                 output.use { sink -> source.copyTo(sink, 128 * 1024) }
             }
-            val targetBytes = runCatching { destination.length() }.getOrDefault(copiedBytes)
-            if (copiedBytes > 0L && targetBytes != copiedBytes) {
+            val targetBytes = runCatching { destination.length() }.getOrDefault(0L)
+            val sourceSizeMatches = file.sizeBytes <= 0L || copiedBytes == file.sizeBytes
+            val targetSizeMatches = targetBytes <= 0L || targetBytes == copiedBytes
+            if (!sourceSizeMatches || !targetSizeMatches) {
                 destination.delete()
                 false
             } else {
