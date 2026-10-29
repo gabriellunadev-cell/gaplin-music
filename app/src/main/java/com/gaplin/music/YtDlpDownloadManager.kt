@@ -361,36 +361,11 @@ class YtDlpDownloadManager(context: Context) {
         val details = sanitizeDiagnostic(raw)
 
         val combined = (details + " " + causeMessage.orEmpty()).lowercase(Locale.ROOT)
-        if ("this video is not available" in combined ||
-            "video unavailable" in combined ||
-            "not available in your country" in combined
-        ) {
-            return "O YouTube informou que este vídeo não está disponível para esta sessão. Ele pode ter sido removido, tornado privado ou restringido. Escolha outro resultado; o Gaplin não tenta contornar essas restrições."
-        }
-        if ("private video" in combined || "members-only" in combined ||
-            "sign in to confirm" in combined || "age-restricted" in combined ||
-            "confirm your age" in combined
-        ) {
-            return if (hasYoutubeCookies()) {
-                "Este conteúdo exige autenticação ou autorização adicional. Confira se a sessão importada ainda está válida e se sua conta tem acesso ao vídeo."
-            } else {
-                "Este conteúdo exige autenticação. Importe um arquivo de cookies Netscape exportado da sua própria sessão do YouTube, caso você tenha acesso autorizado."
-            }
-        }
-        if ("requested format is not available" in combined ||
-            "no video formats found" in combined ||
-            "requested format not available" in combined
-        ) {
-            return "O YouTube não ofereceu um formato compatível para este conteúdo nesta sessão. Tente outro resultado ou importe sua própria sessão autorizada. Vídeos que exigem mesclagem de faixas ainda não são aceitos nesta versão."
-        }
-        if ("403" in combined || "http error 403" in combined) {
-            return if (isYoutubeError(combined)) {
-                "O YouTube recusou a transferência (HTTP 403). Verifique se a sessão importada está válida. Alguns fluxos exigem tokens oficiais de validação que o Gaplin não fabrica nem contorna."
-            } else {
-                "O servidor da fonte recusou a transferência (HTTP 403). Verifique a disponibilidade e a autorização para acessar este conteúdo."
-            }
-        }
-        return details.take(500)
+        return DownloadFailurePolicy.userMessage(
+            raw = combined,
+            hasOwnSession = hasYoutubeCookies(),
+            isYouTube = isYoutubeError(combined)
+        )
     }
 
     private fun validateMedia(item: RemoteMediaResult, audioOnly: Boolean) {
