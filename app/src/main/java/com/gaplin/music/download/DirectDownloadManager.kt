@@ -56,7 +56,7 @@ class DirectDownloadManager(context: Context) {
             request.referer?.takeIf { it.startsWith("https://") || it.startsWith("http://") }?.let {
                 builder.addRequestHeader("Referer", it)
             }
-            DirectDownloadResult.Enqueued(manager.enqueue(builder.build()))
+            DirectDownloadResult.Enqueued(manager.enqueue(builder))
         }.getOrElse {
             DirectDownloadResult.Rejected(it.message ?: "Não foi possível iniciar o download")
         }
