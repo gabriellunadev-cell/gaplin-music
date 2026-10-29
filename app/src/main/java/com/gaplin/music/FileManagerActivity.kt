@@ -2,7 +2,6 @@ package com.gaplin.music
 
 import android.Manifest
 import android.app.RecoverableSecurityException
-import android.content.ContentUris
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -18,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -37,7 +38,6 @@ class FileManagerActivity : ComponentActivity() {
     private var loading by mutableStateOf(false)
     private var duplicateScanRunning by mutableStateOf(false)
     private var statusMessage by mutableStateOf<String?>(null)
-    private var showPermissionDialog by mutableStateOf(false)
 
     private var legacyDeleteQueue: List<Uri> = emptyList()
     private var legacyDeleteIndex = 0
@@ -313,7 +313,6 @@ class FileManagerActivity : ComponentActivity() {
         val mediaStoreUris = files.filterNot { it.isSaf }.map { it.uri }
 
         if (safFiles.isNotEmpty() && !hasWriteAccessToSelectedTree()) {
-            showPermissionDialog = true
             statusMessage = "Para excluir arquivos da pasta escolhida, é necessário vinculá-la novamente com permissão de edição. Use “Conectar pasta” e escolha a mesma pasta."
             return
         }
