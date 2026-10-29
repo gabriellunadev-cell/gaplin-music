@@ -59,6 +59,7 @@ class YtDlpDownloadWorker(
         return try {
             createNotificationChannel()
             setForeground(createForegroundInfo(title, 0))
+            setProgress(workDataOf(KEY_TITLE to title, KEY_PROGRESS to 0))
 
             val output = withContext(Dispatchers.IO) {
                 YoutubeDL.getInstance().init(applicationContext)
@@ -101,6 +102,7 @@ class YtDlpDownloadWorker(
                     val safeProgress = progress.toInt().coerceIn(0, 100)
                     setProgressAsync(
                         workDataOf(
+                            KEY_TITLE to title,
                             KEY_PROGRESS to safeProgress,
                             KEY_ETA to eta.coerceAtLeast(0L).toInt()
                         )
@@ -121,6 +123,7 @@ class YtDlpDownloadWorker(
                 if (publishedUri != null) downloadedFile.delete()
 
                 workDataOf(
+                    KEY_TITLE to title,
                     KEY_FILE_NAME to downloadedFile.name,
                     KEY_FILE_URI to (publishedUri?.toString() ?: downloadedFile.absolutePath),
                     KEY_PROGRESS to 100
@@ -135,7 +138,7 @@ class YtDlpDownloadWorker(
             throw cancelled
         } catch (cancelled: InterruptedException) {
             YoutubeDL.getInstance().destroyProcessById(id.toString())
-            Result.failure(workDataOf(KEY_ERROR to "Download cancelado."))
+            Result.failure(workDataOf(KEY_TITLE to title, KEY_ERROR to "Download cancelado."))
         } catch (cancelled: YoutubeDL.CanceledException) {
             Result.failure(workDataOf(KEY_ERROR to "Download cancelado."))
         } catch (error: Exception) {
@@ -145,7 +148,7 @@ class YtDlpDownloadWorker(
                 ?.take(220)
                 ?.ifBlank { null }
                 ?: "Não foi possível concluir o download."
-            Result.failure(workDataOf(KEY_ERROR to message))
+            Result.failure(workDataOf(KEY_TITLE to title, KEY_ERROR to message))
         }
     }
 
