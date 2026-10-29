@@ -153,7 +153,11 @@ class MainActivity : ComponentActivity() {
                     val treeUri = selectedTreeUri
                     try {
                         val snapshot = withContext(Dispatchers.IO) {
-                            val indexed = MediaCatalog.scan(this@MainActivity)
+                            val indexed = MediaCatalog.scan(
+                                this@MainActivity,
+                                includeAudio = audioPermission,
+                                includeVideo = videoPermission
+                            )
                             val selected = treeUri?.let {
                                 MediaCatalog.scanSelectedTree(this@MainActivity, it)
                             }
@@ -174,8 +178,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            LaunchedEffect(audioPermission, videoPermission) {
-                if (audioPermission || videoPermission) scanLibrary()
+            LaunchedEffect(audioPermission, videoPermission, selectedTreeUri) {
+                if (audioPermission || videoPermission || selectedTreeUri != null) scanLibrary()
             }
 
             DisposableEffect(playerReady) {
@@ -602,7 +606,7 @@ class MainActivity : ComponentActivity() {
                             VideoPlaybackPanel(
                                 player = player,
                                 title = currentVideo!!.title,
-                                onClose = { player.pause(); showPlayer = false },
+                                onClose = { player.pause(); showPlayer = false; currentVideo = null; videoMode = false },
                                 onFullscreen = {
                                     previousVideoOrientation = requestedOrientation
                                     requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -1496,7 +1500,7 @@ private fun VideoPlaybackPanel(player: Player, title: String, onClose: () -> Uni
                     )
                 }
             },
-            modifier = Modifier.fillMaxWidth().height(190.dp),
+            modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f),
             update = { it.player = player }
         )
     }
