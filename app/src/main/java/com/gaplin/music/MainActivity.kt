@@ -1458,6 +1458,7 @@ private fun TrackArtwork(track: AudioTrack, modifier: Modifier = Modifier) {
 private fun ParticleAudioVisualizer(
     isPlaying: Boolean,
     progress: Float,
+    spectrum: List<Float>,
     modifier: Modifier = Modifier
 ) {
     val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "gaplin-neural-spectrum")
@@ -1489,12 +1490,11 @@ private fun ParticleAudioVisualizer(
         )
 
         fun spectrum(x: Float): Float {
-            val a = kotlin.math.sin(x * 7.2f - p * 1.15f)
-            val b = kotlin.math.sin(x * 13.4f + p * 0.82f + 0.7f)
-            val c = kotlin.math.cos(x * 22.0f - p * 1.7f)
-            val formant = 0.48f + 0.25f * a + 0.17f * b + 0.10f * c
+            val index = (x.coerceIn(0f, 1f) * (spectrum.size - 1).coerceAtLeast(0)).toInt()
+            val measuredEnergy = spectrum.getOrNull(index)?.coerceIn(0f, 1f) ?: 0f
             val envelope = kotlin.math.sqrt(kotlin.math.sin(Math.PI * x).toFloat().coerceAtLeast(0f))
-            return (formant * envelope * motion).coerceAtLeast(0f)
+            val microMotion = 0.94f + 0.06f * kotlin.math.sin(p * 1.35f + x * 11f)
+            return (0.025f + measuredEnergy * 1.15f) * envelope * microMotion * motion
         }
 
         fun colorAt(x: Float): Color {
@@ -1606,7 +1606,14 @@ private fun NowPlayingDialog(
     onAddToPlaylist: () -> Unit,
     onStartTimer: (Int) -> Unit,
     onCancelTimer: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    audioSessionId: Int,
+    spectrumPermissionGranted: Boolean,
+    equalizer: EqualizerSnapshot,
+    onRequestSpectrumPermission: () -> Unit,
+    onEqualizerEnabled: (Boolean) -> Unit,
+    onEqualizerPreset: (String) -> Unit,
+    onEqualizerBandChange: (Int, Float) -> Unit
 ) {
     var position by remember(track.uri) { mutableStateOf(0L) }
     var duration by remember(track.uri) { mutableStateOf(track.durationMs.coerceAtLeast(0L)) }
@@ -1619,6 +1626,39 @@ private fun NowPlayingDialog(
     var volume by remember { mutableStateOf(player.volume) }
     var shuffle by remember { mutableStateOf(player.shuffleModeEnabled) }
     var repeatMode by remember { mutableStateOf(player.repeatMode) }
+    var spectrumData by remember(track.uri) { mutableStateOf(List(AudioSpectrumCapture.BAND_COUNT) { 0f }) }
+    var spectrumCaptureMessage by remember { mutableStateOf<String?>(null) }
+    var showSpectrumPermissionInfo by remember { mutableStateOf(false) }
+    var showEqualizer by remember { mutableStateOf(false) }
+    val spectrumHandler = remember { Handler(Looper.getMainLooper()) }
+
+    DisposableEffect(audioSessionId, spectrumPermissionGranted) {
+        spectrumData = List(AudioSpectrumCapture.BAND_COUNT) { 0f }
+        if (!spectrumPermissionGranted) {
+            spectrumCaptureMessage = "Ative a análise de áudio para visualizar as frequências reais."
+            onDispose { }
+        } else if (audioSessionId <= 0) {
+            spectrumCaptureMessage = "Aguardando a sessão de áudio do player."
+            onDispose { }
+        } else {
+            val active = AtomicBoolean(true)
+            val capture = AudioSpectrumCapture(audioSessionId) { frame ->
+                if (active.get()) {
+                    val immutableFrame = frame.toList()
+                    spectrumHandler.post {
+                        if (active.get()) spectrumData = immutableFrame
+                    }
+                }
+            }
+            spectrumCaptureMessage = if (capture.isAvailable) null else capture.errorMessage
+            onDispose {
+                active.set(false)
+                capture.close()
+                spectrumHandler.removeCallbacksAndMessages(null)
+            }
+        }
+    }
+
     LaunchedEffect(player, track.uri) {
         while (true) {
             if (!scrubbing) {
@@ -1653,17 +1693,46 @@ private fun NowPlayingDialog(
                         Text("TOCANDO AGORA", color = VioletSoft, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                         Text("GAPLIN MUSIC", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
                     }
+                    IconButton(onClick = { showEqualizer = true }) {
+                        Icon(Icons.Default.Equalizer, "Equalizador de áudio", tint = VioletSoft)
+                    }
                     IconButton(onClick = { showQueue = !showQueue }) {
                         Icon(Icons.Default.QueueMusic, "Fila de reprodução", tint = Color.White)
                     }
                 }
 
                 Spacer(Modifier.height(8.dp))
-                ParticleAudioVisualizer(
-                    isPlaying = player.isPlaying,
-                    progress = sliderValue,
-                    modifier = Modifier.fillMaxWidth().weight(1f).heightIn(min = 180.dp, max = 330.dp)
-                )
+                Box(
+                    Modifier.fillMaxWidth().weight(1f).heightIn(min = 180.dp, max = 330.dp),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    ParticleAudioVisualizer(
+                        isPlaying = player.isPlaying,
+                        progress = sliderValue,
+                        spectrum = spectrumData,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    if (!spectrumPermissionGranted) {
+                        TextButton(
+                            onClick = { showSpectrumPermissionInfo = true },
+                            modifier = Modifier.padding(bottom = 7.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(Color(0xCC111A38))
+                        ) {
+                            Icon(Icons.Default.GraphicEq, null, tint = VioletSoft)
+                            Spacer(Modifier.width(7.dp))
+                            Text("ATIVAR ESPECTRO REAL", color = Color.White, fontSize = 10.sp, letterSpacing = 1.sp)
+                        }
+                    } else if (spectrumCaptureMessage != null && audioSessionId <= 0) {
+                        Text(
+                            "AGUARDANDO ÁUDIO",
+                            color = TextMuted,
+                            fontSize = 9.sp,
+                            letterSpacing = 1.5.sp,
+                            modifier = Modifier.padding(bottom = 9.dp)
+                        )
+                    }
+                }
                 Spacer(Modifier.height(10.dp))
 
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -1798,6 +1867,37 @@ private fun NowPlayingDialog(
                 }
             }
         }
+    }
+
+    if (showSpectrumPermissionInfo) {
+        AlertDialog(
+            onDismissRequest = { showSpectrumPermissionInfo = false },
+            title = { Text("Espectro de áudio em tempo real") },
+            text = {
+                Text(
+                    "O Android exige a permissão de áudio para disponibilizar a análise FFT da sessão que o Gaplin Music está reproduzindo. O aplicativo processa os níveis de frequência em memória para animar as ondas; não grava nem salva esses dados."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showSpectrumPermissionInfo = false
+                    onRequestSpectrumPermission()
+                }) { Text("Ativar espectro") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSpectrumPermissionInfo = false }) { Text("Agora não") }
+            }
+        )
+    }
+
+    if (showEqualizer) {
+        EqualizerDialog(
+            state = equalizer,
+            onDismiss = { showEqualizer = false },
+            onEnabled = onEqualizerEnabled,
+            onPreset = onEqualizerPreset,
+            onBandChange = onEqualizerBandChange
+        )
     }
 
     if (showTimer) {
