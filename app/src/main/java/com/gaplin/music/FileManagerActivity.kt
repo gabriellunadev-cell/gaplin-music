@@ -27,6 +27,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 
 class FileManagerActivity : ComponentActivity() {
     private var selectedTreeUri by mutableStateOf<Uri?>(null)
@@ -43,6 +44,8 @@ class FileManagerActivity : ComponentActivity() {
     private var legacyDeleteIndex = 0
     private var legacyDeleteCallback: (() -> Unit)? = null
     private var mediaDeleteCallback: (() -> Unit)? = null
+    private var legacyDeleteIsMove = false
+    private var pendingMediaDeleteIsMove = false
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -98,17 +101,33 @@ class FileManagerActivity : ComponentActivity() {
             if (result.resultCode == RESULT_OK) {
                 deleteNextLegacyMediaStoreItem()
             } else {
+                val alreadyDeleted = legacyDeleteQueue.take(legacyDeleteIndex)
+                cleanupLocalReferences(alreadyDeleted)
+                val count = legacyDeleteIndex
                 legacyDeleteQueue = emptyList()
                 legacyDeleteIndex = 0
                 legacyDeleteCallback = null
-                statusMessage = "A exclusão foi cancelada. Os arquivos originais foram mantidos."
+                statusMessage = if (count > 0) {
+                    "$count arquivo(s) foram excluídos antes do cancelamento; os demais foram mantidos."
+                } else if (legacyDeleteIsMove) {
+                    "A cópia no destino foi mantida, mas a exclusão dos originais foi cancelada."
+                } else {
+                    "A exclusão foi cancelada. Os arquivos originais foram mantidos."
+                }
+                legacyDeleteIsMove = false
                 scanFiles()
             }
         } else if (result.resultCode == RESULT_OK) {
+            pendingMediaDeleteIsMove = false
             callback?.invoke()
             scanFiles()
         } else {
-            statusMessage = "A exclusão foi cancelada. Nenhum arquivo do MediaStore foi removido."
+            statusMessage = if (pendingMediaDeleteIsMove) {
+                "A cópia no destino foi concluída, mas você cancelou a exclusão dos originais. Os originais e as cópias foram mantidos."
+            } else {
+                "A exclusão foi cancelada. Nenhum arquivo do MediaStore foi removido."
+            }
+            pendingMediaDeleteIsMove = false
             scanFiles()
         }
     }
@@ -320,9 +339,11 @@ class FileManagerActivity : ComponentActivity() {
         if (mediaStoreUris.isEmpty()) {
             lifecycleScope.launch {
                 val deletedSaf = withContext(Dispatchers.IO) {
-                    safFiles.count { FileManagerRepository.deleteSafDocument(this@FileManagerActivity, it.uri) }
+                    safFiles.filter { FileManagerRepository.deleteSafDocument(this@FileManagerActivity, it.uri) }
+                        .map { it.uri }
                 }
-                statusMessage = "$deletedSaf arquivo(s) removido(s) da pasta selecionada."
+                cleanupLocalReferences(deletedSaf)
+                statusMessage = "${deletedSaf.size} arquivo(s) removido(s) da pasta selecionada."
                 scanFiles()
             }
         } else {
@@ -330,9 +351,11 @@ class FileManagerActivity : ComponentActivity() {
             requestMediaStoreDelete(mediaStoreUris) {
                 lifecycleScope.launch {
                     val deletedSaf = withContext(Dispatchers.IO) {
-                        safFiles.count { FileManagerRepository.deleteSafDocument(this@FileManagerActivity, it.uri) }
+                        safFiles.filter { FileManagerRepository.deleteSafDocument(this@FileManagerActivity, it.uri) }
+                            .map { it.uri }
                     }
-                    statusMessage = "Exclusão concluída. $deletedSaf arquivo(s) SAF removido(s)."
+                    cleanupLocalReferences(deletedSaf + mediaStoreUris)
+                    statusMessage = "Exclusão concluída. ${deletedSaf.size} arquivo(s) SAF removido(s)."
                     scanFiles()
                 }
             }
@@ -362,20 +385,23 @@ class FileManagerActivity : ComponentActivity() {
             val safSources = copyResult.copied.filter { it.isSaf }
             val mediaSources = copyResult.copied.filterNot { it.isSaf }.map { it.uri }
 
-            suspend fun removeSafSources(): Int = withContext(Dispatchers.IO) {
-                safSources.count { FileManagerRepository.deleteSafDocument(this@FileManagerActivity, it.uri) }
+            suspend fun removeSafSources(): List<Uri> = withContext(Dispatchers.IO) {
+                safSources.filter { FileManagerRepository.deleteSafDocument(this@FileManagerActivity, it.uri) }
+                    .map { it.uri }
             }
 
             val summary = "Copiados: ${copyResult.copied.size}; falharam: ${copyResult.failed.size}."
             if (mediaSources.isEmpty()) {
                 val deletedSaf = removeSafSources()
-                statusMessage = "$summary Origens SAF removidas: $deletedSaf."
+                cleanupLocalReferences(deletedSaf)
+                statusMessage = "$summary Origens SAF removidas: ${deletedSaf.size}."
                 scanFiles()
             } else {
-                requestMediaStoreDelete(mediaSources) {
+                requestMediaStoreDelete(mediaSources, isMove = true) {
                     lifecycleScope.launch {
                         val deletedSaf = removeSafSources()
-                        statusMessage = "$summary Origens SAF removidas: $deletedSaf. Os originais da biblioteca Android foram excluídos após sua autorização."
+                        cleanupLocalReferences(deletedSaf + mediaSources)
+                        statusMessage = "$summary Origens SAF removidas: ${deletedSaf.size}. Os originais da biblioteca Android foram excluídos após sua autorização."
                         scanFiles()
                     }
                 }
@@ -383,11 +409,12 @@ class FileManagerActivity : ComponentActivity() {
         }
     }
 
-    private fun requestMediaStoreDelete(uris: List<Uri>, onSuccess: () -> Unit) {
+    private fun requestMediaStoreDelete(uris: List<Uri>, isMove: Boolean = false, onSuccess: () -> Unit) {
         if (uris.isEmpty()) {
             onSuccess()
             return
         }
+        pendingMediaDeleteIsMove = isMove
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
                 val request = MediaStore.createDeleteRequest(contentResolver, uris)
@@ -401,8 +428,40 @@ class FileManagerActivity : ComponentActivity() {
             legacyDeleteQueue = uris
             legacyDeleteIndex = 0
             legacyDeleteCallback = onSuccess
+            legacyDeleteIsMove = isMove
             deleteNextLegacyMediaStoreItem()
         }
+    }
+
+    private fun cleanupLocalReferences(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        val removed = uris.map { it.toString() }.toSet()
+        val preferences = getSharedPreferences("gaplin_music", MODE_PRIVATE)
+        val favorites = preferences.getStringSet("favorites", emptySet()).orEmpty().toMutableSet()
+        favorites.removeAll(removed)
+
+        val rawPlaylists = preferences.getString("playlists", "[]") ?: "[]"
+        val updatedPlaylists = runCatching {
+            val current = JSONArray(rawPlaylists)
+            val updated = JSONArray()
+            for (index in 0 until current.length()) {
+                val playlist = current.optJSONObject(index) ?: continue
+                val tracks = playlist.optJSONArray("tracks") ?: JSONArray()
+                val keptTracks = JSONArray()
+                for (trackIndex in 0 until tracks.length()) {
+                    val uri = tracks.optString(trackIndex)
+                    if (uri.isNotBlank() && uri !in removed) keptTracks.put(uri)
+                }
+                playlist.put("tracks", keptTracks)
+                updated.put(playlist)
+            }
+            updated.toString()
+        }.getOrDefault(rawPlaylists)
+
+        preferences.edit()
+            .putStringSet("favorites", favorites)
+            .putString("playlists", updatedPlaylists)
+            .apply()
     }
 
     private fun deleteNextLegacyMediaStoreItem() {
@@ -411,6 +470,7 @@ class FileManagerActivity : ComponentActivity() {
             legacyDeleteIndex = 0
             val callback = legacyDeleteCallback
             legacyDeleteCallback = null
+            legacyDeleteIsMove = false
             callback?.invoke()
             return
         }
@@ -427,7 +487,16 @@ class FileManagerActivity : ComponentActivity() {
             legacyDeleteQueue = emptyList()
             legacyDeleteIndex = 0
             legacyDeleteCallback = null
-            statusMessage = "O Android não autorizou apagar um dos arquivos. Os demais originais foram mantidos."
+            val alreadyDeleted = legacyDeleteQueue.take(legacyDeleteIndex)
+            cleanupLocalReferences(alreadyDeleted)
+            statusMessage = if (legacyDeleteIndex > 0) {
+                "$legacyDeleteIndex arquivo(s) foram excluídos antes da falha. Os demais foram mantidos."
+            } else if (legacyDeleteIsMove) {
+                "A cópia no destino foi mantida, mas o Android não autorizou excluir os originais."
+            } else {
+                "O Android não autorizou apagar os arquivos selecionados."
+            }
+            legacyDeleteIsMove = false
             scanFiles()
         } catch (_: Exception) {
             legacyDeleteIndex++
