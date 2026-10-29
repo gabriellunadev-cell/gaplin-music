@@ -967,7 +967,7 @@ private fun MoreScreen(
         MoreOptionCard(
             "Gerenciador inteligente",
             "Selecionar, mover, excluir e encontrar arquivos duplicados",
-            Icons.Default.FolderManaged,
+            Icons.Default.FolderOpen,
             onManager
         )
         Spacer(Modifier.height(20.dp))
