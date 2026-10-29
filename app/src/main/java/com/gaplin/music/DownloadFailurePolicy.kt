@@ -7,7 +7,6 @@ internal object DownloadFailurePolicy {
         if ("this video is not available" in value ||
             "video unavailable" in value ||
             "not available in your country" in value ||
-            "private video" in value && !hasOwnSession
         ) {
             return "A fonte informou que este vídeo não está disponível para esta sessão. Ele pode ter sido removido, tornado privado ou restringido por região. Escolha outro resultado ou confirme o acesso no site oficial."
         }
