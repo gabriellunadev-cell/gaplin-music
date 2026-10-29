@@ -78,10 +78,13 @@ object MediaCatalog {
             MediaStore.Audio.Media.RELATIVE_PATH else MediaStore.Audio.Media.DATA
         projection += pathColumn
         val result = mutableListOf<AudioTrack>()
+        // MediaStore.Audio.Media já contém apenas arquivos de áudio.
+        // Não filtrar por IS_MUSIC: alguns aparelhos deixam essa flag zerada
+        // para músicas copiadas manualmente ou recebidas por outros aplicativos.
         resolver.query(
             collection,
             projection.toTypedArray(),
-            "${MediaStore.Audio.Media.IS_MUSIC} != 0",
+            null,
             null,
             "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
         )?.use { cursor ->
