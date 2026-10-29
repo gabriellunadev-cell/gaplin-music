@@ -17,8 +17,6 @@ import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import com.yausername.ffmpeg.FFmpeg
-import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -62,8 +60,7 @@ class YtDlpDownloadWorker(
             setProgress(workDataOf(KEY_TITLE to title, KEY_PROGRESS to 0))
 
             val output = withContext(Dispatchers.IO) {
-                YoutubeDL.getInstance().init(applicationContext)
-                FFmpeg.getInstance().init(applicationContext)
+                YtDlpEngine.initialize(applicationContext)
 
                 val downloadRoot = File(
                     applicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
@@ -142,12 +139,10 @@ class YtDlpDownloadWorker(
         } catch (cancelled: YoutubeDL.CanceledException) {
             Result.failure(workDataOf(KEY_ERROR to "Download cancelado."))
         } catch (error: Exception) {
-            val message = error.message
-                ?.lineSequence()
-                ?.firstOrNull()
-                ?.take(220)
-                ?.ifBlank { null }
-                ?: "Não foi possível concluir o download."
+            val message = YtDlpEngine.readableError(
+                error,
+                "Não foi possível concluir o download."
+            )
             Result.failure(workDataOf(KEY_TITLE to title, KEY_ERROR to message))
         }
     }
