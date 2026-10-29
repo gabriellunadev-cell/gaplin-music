@@ -15,7 +15,8 @@ data class AudioTrack(
     val durationMs: Long,
     val album: String = "Álbum desconhecido",
     val albumId: Long = -1L,
-    val artworkUri: Uri? = null
+    val artworkUri: Uri? = null,
+    val mimeType: String? = null
 )
 
 data class VideoEntry(
