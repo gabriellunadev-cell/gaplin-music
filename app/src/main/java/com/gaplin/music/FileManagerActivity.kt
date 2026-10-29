@@ -355,19 +355,24 @@ class FileManagerActivity : ComponentActivity() {
             }
 
             val safSources = copyResult.copied.filter { it.isSaf }
-            val deletedSaf = withContext(Dispatchers.IO) {
-                safSources.count { FileManagerRepository.deleteSafDocument(this@FileManagerActivity, it.uri) }
-            }
             val mediaSources = copyResult.copied.filterNot { it.isSaf }.map { it.uri }
 
-            val summary = "Copiados: ${copyResult.copied.size}; falharam: ${copyResult.failed.size}; origens SAF removidas: $deletedSaf."
+            suspend fun removeSafSources(): Int = withContext(Dispatchers.IO) {
+                safSources.count { FileManagerRepository.deleteSafDocument(this@FileManagerActivity, it.uri) }
+            }
+
+            val summary = "Copiados: ${copyResult.copied.size}; falharam: ${copyResult.failed.size}."
             if (mediaSources.isEmpty()) {
-                statusMessage = summary
+                val deletedSaf = removeSafSources()
+                statusMessage = "$summary Origens SAF removidas: $deletedSaf."
                 scanFiles()
             } else {
                 requestMediaStoreDelete(mediaSources) {
-                    statusMessage = "$summary Os originais da biblioteca Android foram excluídos após sua autorização."
-                    scanFiles()
+                    lifecycleScope.launch {
+                        val deletedSaf = removeSafSources()
+                        statusMessage = "$summary Origens SAF removidas: $deletedSaf. Os originais da biblioteca Android foram excluídos após sua autorização."
+                        scanFiles()
+                    }
                 }
             }
         }
