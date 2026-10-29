@@ -14,6 +14,8 @@ import android.os.CancellationSignal
 import android.util.Size
 import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -688,7 +690,7 @@ class MainActivity : ComponentActivity() {
                                                 Text("TEMPORADA $season", color = VioletSoft, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                             }
                                             items(seasonEpisodes, key = { it.uri.toString() }) { video ->
-                                                VideoRow(video) { playVideo(video) }
+                                                VideoRow(video, onPlay = { playVideo(video) })
                                             }
                                         }
                                     }
@@ -970,7 +972,7 @@ class MainActivity : ComponentActivity() {
             } catch (_: Exception) {
                 pendingBulkDocumentUris = emptyList()
                 bulkDeleteSuccessCallback = null
-                scanError = "O Android não conseguiu iniciar a autorização de exclusão. Nenhum item foi removido."
+                Toast.makeText(this, "O Android não conseguiu iniciar a autorização de exclusão.", Toast.LENGTH_LONG).show()
             }
         } else {
             val deletedMedia = mediaStoreUris.count { uri ->
@@ -981,7 +983,7 @@ class MainActivity : ComponentActivity() {
             }
             mediaRefreshToken++
             onSuccess()
-            scanError = "Arquivos removidos: $deletedMedia. Alguns itens podem exigir autorização individual do Android."
+            Toast.makeText(this, "Arquivos removidos: $deletedMedia", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -1229,7 +1231,7 @@ private fun HomeScreen(
             AudioRow(track, currentAudio, false, { onPlayAudio(track) }, null)
         }
         items(catalog.videos.take(3), key = { "home-video:${it.uri}" }) { video ->
-            VideoRow(video) { onPlayVideo(video) }
+            VideoRow(video, onPlay = { onPlayVideo(video) })
         }
         if (catalog.audio.isEmpty() && catalog.videos.isEmpty()) item {
             EmptyPanel(Icons.Default.LibraryMusic, "Sua biblioteca está vazia", "Permita o acesso a músicas e vídeos e toque em atualizar para fazer a varredura.")
