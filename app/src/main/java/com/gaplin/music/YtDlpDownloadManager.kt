@@ -4,6 +4,7 @@ import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
+import android.content.ContentResolver
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
@@ -15,6 +16,9 @@ import dev.ffmpegkit_maintained.ytdlp.YtDlpRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.nio.charset.StandardCharsets
 import java.util.Locale
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ExecutionException
@@ -116,9 +120,74 @@ class YtDlpDownloadManager(context: Context) {
         }
     }
 
+    private val youtubeCookiesFile: File by lazy {
+        File(appContext.noBackupFilesDir, "yt-dlp-youtube-cookies.txt")
+    }
+
+    fun hasYoutubeCookies(): Boolean =
+        youtubeCookiesFile.isFile && youtubeCookiesFile.length() > 0L
+
+    suspend fun importYoutubeCookies(uri: Uri): Int = withContext(Dispatchers.IO) {
+        val raw = appContext.contentResolver.openInputStream(uri)?.use { input ->
+            val output = java.io.ByteArrayOutputStream()
+            val buffer = ByteArray(8192)
+            var total = 0
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                total += count
+                require(total <= 2 * 1024 * 1024) { "O arquivo de cookies excede 2 MB." }
+                output.write(buffer, 0, count)
+            }
+            output.toByteArray().toString(Charsets.UTF_8)
+        } ?: throw IllegalStateException("Não foi possível abrir o arquivo selecionado.")
+
+        val lines = raw.lineSequence().map { it.trimEnd('\r') }.toList()
+        require(lines.any { it.trim().equals("# Netscape HTTP Cookie File", true) }) {
+            "Arquivo inválido. Importe cookies no formato Netscape (.txt)."
+        }
+
+        val youtubeRows = lines.filter { line ->
+            if (line.isBlank() || line.startsWith("#") && !line.startsWith("#HttpOnly_", true)) {
+                false
+            } else {
+                val domain = line.split('\t').firstOrNull().orEmpty()
+                    .removePrefix("#HttpOnly_")
+                    .trimStart('.')
+                    .lowercase(Locale.ROOT)
+                domain == "youtube.com" || domain.endsWith(".youtube.com")
+            }
+        }
+        require(youtubeRows.isNotEmpty()) {
+            "O arquivo não contém cookies do YouTube. Exporte os cookies de youtube.com."
+        }
+        require(youtubeRows.all { it.split('\t').size >= 7 }) {
+            "O arquivo de cookies está incompleto ou não está no formato Netscape."
+        }
+
+        val temporary = File(appContext.noBackupFilesDir, "yt-dlp-youtube-cookies.tmp")
+        temporary.writeText(raw, Charsets.UTF_8)
+        if (youtubeCookiesFile.exists() && !youtubeCookiesFile.delete()) {
+            temporary.delete()
+            throw IllegalStateException("Não foi possível substituir a sessão salva.")
+        }
+        if (!temporary.renameTo(youtubeCookiesFile)) {
+            temporary.delete()
+            throw IllegalStateException("Não foi possível salvar a sessão no armazenamento privado.")
+        }
+        youtubeRows.size
+    }
+
+    suspend fun clearYoutubeCookies() = withContext(Dispatchers.IO) {
+        if (youtubeCookiesFile.exists() && !youtubeCookiesFile.delete()) {
+            throw IllegalStateException("Não foi possível remover a sessão salva.")
+        }
+    }
+
     suspend fun download(
         item: RemoteMediaResult,
         audioOnly: Boolean,
+        onStage: (String) -> Unit,
         onProgress: (Float, Long) -> Unit
     ): List<DownloadedMedia> = withContext(Dispatchers.IO) {
         require(item.kind != RemoteMediaKind.CHANNEL) {
@@ -129,6 +198,9 @@ class YtDlpDownloadManager(context: Context) {
         }
 
         initialize()
+        onStage("Validando disponibilidade")
+        validateMedia(item, audioOnly)
+        onStage("Iniciando transferência")
 
         val jobDirectory = File(
             tempDirectory,
@@ -160,10 +232,9 @@ class YtDlpDownloadManager(context: Context) {
                 .addOption("--no-overwrites")
                 .addOption("--newline")
 
-            val host = Uri.parse(item.url).host.orEmpty().lowercase(Locale.ROOT)
-            // Keep yt-dlp's maintained default YouTube client selection.
-            // Forcing only the Android player can expose a reduced format set and
-            // make valid videos fail with "Requested format is not available".
+            if (isYouTubeUrl(item.url) && hasYoutubeCookies()) {
+                request.addOption("--cookies", youtubeCookiesFile.absolutePath)
+            }
 
             if (item.kind == RemoteMediaKind.VIDEO) {
                 request.addOption("--no-playlist")
@@ -289,19 +360,79 @@ class YtDlpDownloadManager(context: Context) {
             ?: "Falha desconhecida no motor yt-dlp."
         val details = sanitizeDiagnostic(raw)
 
-        if (details.contains("403", ignoreCase = true) ||
-            causeMessage?.contains("403", ignoreCase = true) == true
+        val combined = (details + " " + causeMessage.orEmpty()).lowercase(Locale.ROOT)
+        if ("this video is not available" in combined ||
+            "video unavailable" in combined ||
+            "not available in your country" in combined
         ) {
-            return "A fonte recusou a transferência (HTTP 403). O cliente Android do yt-dlp foi tentado; este conteúdo ainda pode exigir verificação/PO Token, sessão válida ou não oferecer um formato compatível."
+            return "O YouTube informou que este vídeo não está disponível para esta sessão. Ele pode ter sido removido, tornado privado ou restringido. Escolha outro resultado; o Gaplin não tenta contornar essas restrições."
         }
-        if (details.contains("private video", ignoreCase = true) ||
-            details.contains("members-only", ignoreCase = true) ||
-            details.contains("sign in", ignoreCase = true)
+        if ("private video" in combined || "members-only" in combined ||
+            "sign in to confirm" in combined || "age-restricted" in combined ||
+            "confirm your age" in combined
         ) {
-            return "A fonte exige autenticação ou restringe este conteúdo. Use somente uma sessão própria e conteúdo ao qual você tenha acesso autorizado."
+            return if (hasYoutubeCookies()) {
+                "Este conteúdo exige autenticação ou autorização adicional. Confira se a sessão importada ainda está válida e se sua conta tem acesso ao vídeo."
+            } else {
+                "Este conteúdo exige autenticação. Importe um arquivo de cookies Netscape exportado da sua própria sessão do YouTube, caso você tenha acesso autorizado."
+            }
+        }
+        if ("requested format is not available" in combined ||
+            "no video formats found" in combined ||
+            "requested format not available" in combined
+        ) {
+            return "O YouTube não ofereceu um formato compatível para este conteúdo nesta sessão. Tente outro resultado ou importe sua própria sessão autorizada. Vídeos que exigem mesclagem de faixas ainda não são aceitos nesta versão."
+        }
+        if ("403" in combined || "http error 403" in combined) {
+            return if (isYoutubeError(combined)) {
+                "O YouTube recusou a transferência (HTTP 403). Verifique se a sessão importada está válida. Alguns fluxos exigem tokens oficiais de validação que o Gaplin não fabrica nem contorna."
+            } else {
+                "O servidor da fonte recusou a transferência (HTTP 403). Verifique a disponibilidade e a autorização para acessar este conteúdo."
+            }
         }
         return details.take(500)
     }
+
+    private fun validateMedia(item: RemoteMediaResult, audioOnly: Boolean) {
+        val flags = mutableListOf("--retries", "2", "--extractor-retries", "2")
+        if (isYouTubeUrl(item.url) && hasYoutubeCookies()) {
+            flags.addAll(listOf("--cookies", youtubeCookiesFile.absolutePath))
+        }
+
+        val summary = try {
+            org.json.JSONObject(YtDlp.inspectMedia(item.url, flags.toTypedArray()))
+        } catch (error: Exception) {
+            val raw = error.cause?.message ?: error.message ?: "Falha ao consultar a fonte."
+            throw IllegalStateException(buildDownloadError(raw, listOf("ERROR: " + sanitizeDiagnostic(raw))), error)
+        }
+
+        if (summary.optBoolean("is_playlist")) {
+            if (summary.optInt("entry_count") <= 0) {
+                throw IllegalStateException("A playlist está vazia ou não possui itens acessíveis.")
+            }
+            return
+        }
+
+        val audioFormats = summary.optInt("audio_formats")
+        val progressiveFormats = summary.optInt("progressive_formats")
+        if (audioOnly && audioFormats <= 0) {
+            throw IllegalStateException("Este vídeo não oferece uma faixa de áudio acessível nesta sessão.")
+        }
+        if (!audioOnly && progressiveFormats <= 0) {
+            throw IllegalStateException(
+                "A fonte não oferece vídeo e áudio no mesmo arquivo. Esta versão não inclui FFmpeg para mesclar faixas separadas."
+            )
+        }
+    }
+
+    private fun isYouTubeUrl(url: String): Boolean {
+        val host = Uri.parse(url).host.orEmpty().lowercase(Locale.ROOT)
+        return host == "youtu.be" || host == "youtube.com" || host.endsWith(".youtube.com") ||
+            host == "youtube-nocookie.com" || host.endsWith(".youtube-nocookie.com")
+    }
+
+    private fun isYoutubeError(message: String): Boolean =
+        "youtube" in message || "googlevideo.com" in message
 
     private fun sanitizeDiagnostic(message: String): String {
         return message
