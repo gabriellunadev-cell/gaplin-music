@@ -56,7 +56,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.gaplin.music.download.YtDlpDownloadWorker
-import com.yausername.youtubedl_android.FFmpeg
+import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import com.yausername.youtubedl_android.mapper.VideoInfo
@@ -306,7 +306,9 @@ fun DownloadCenterScreen(onRefreshLibrary: () -> Unit) {
 
 @Composable
 private fun DownloadJobCard(workInfo: WorkInfo, onCancel: () -> Unit) {
-    val title = workInfo.inputData.getString(YtDlpDownloadWorker.KEY_TITLE)?.ifBlank { null } ?: "Download"
+    val title = workInfo.progress.getString(YtDlpDownloadWorker.KEY_TITLE)
+        ?: workInfo.outputData.getString(YtDlpDownloadWorker.KEY_TITLE)
+        ?: "Download"
     val progress = workInfo.progress.getInt(YtDlpDownloadWorker.KEY_PROGRESS, 0).coerceIn(0, 100)
     val fileName = workInfo.outputData.getString(YtDlpDownloadWorker.KEY_FILE_NAME)
     val error = workInfo.outputData.getString(YtDlpDownloadWorker.KEY_ERROR)
