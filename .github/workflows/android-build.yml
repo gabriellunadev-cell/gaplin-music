@@ -117,16 +117,6 @@ jobs:
       - name: Run unit tests and build APK
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug
 
-      - name: Verify QuickJS and yt-dlp-ejs inside Android emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_2
-          disable-animations: true
-          script: gradle --no-daemon --stacktrace :app:connectedDebugAndroidTest
-
       - name: Verify generated APK
         run: |
           APK="app/build/outputs/apk/debug/app-debug.apk"
@@ -136,6 +126,8 @@ jobs:
           sha256sum "$APK"
           ls -lh "$APK"
 
+      # Publish the installable APK as soon as the build is verified.
+      # Emulator boot can fail on hosted runners independently of APK compilation.
       - name: Upload installable debug APK
         uses: actions/upload-artifact@v4
         with:
@@ -143,3 +135,13 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Verify QuickJS and yt-dlp-ejs inside Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: gradle --no-daemon --stacktrace :app:connectedDebugAndroidTest
