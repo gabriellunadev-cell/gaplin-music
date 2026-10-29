@@ -27,6 +27,7 @@ class AudioSpectrumCapture(
             errorMessage = "A sessão de áudio ainda não está disponível."
         } else try {
             val effect = Visualizer(audioSessionId)
+            visualizer = effect
             val range = Visualizer.getCaptureSizeRange()
             val maxSize = range[1].coerceAtMost(1024)
             val captureSize = Integer.highestOneBit(maxSize).coerceAtLeast(range[0])
@@ -57,11 +58,9 @@ class AudioSpectrumCapture(
                 true
             )
             if (listenerStatus != 0) {
-                effect.release()
                 throw IllegalStateException("Visualizer rejeitou a taxa FFT (status=$listenerStatus, rate=$captureRateMilliHz mHz).")
             }
             effect.enabled = true
-            visualizer = effect
             isAvailable = true
         } catch (error: Exception) {
             errorMessage = when (error) {
