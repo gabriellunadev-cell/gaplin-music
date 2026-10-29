@@ -52,7 +52,7 @@ private val Cyan = Color(0xFF59D5FF)
 private val TextMuted = Color(0xFFAAA3B8)
 
 private enum class AppTab(val label: String) {
-    HOME("Início"), MUSIC("Músicas"), FILES("Arquivos"), FAVORITES("Favoritos"), VIDEOS("Vídeos")
+    HOME("Início"), MUSIC("Músicas"), FILES("Arquivos"), DOWNLOADS("Download"), FAVORITES("Favoritos"), VIDEOS("Vídeos")
 }
 
 class MainActivity : ComponentActivity() {
@@ -105,6 +105,7 @@ class MainActivity : ComponentActivity() {
             var showPlayer by remember { mutableStateOf(false) }
             var showFullscreenVideo by remember { mutableStateOf(false) }
             var playbackError by remember { mutableStateOf<String?>(null) }
+            var downloadMessage by remember { mutableStateOf<String?>(null) }
 
             fun scanLibrary() {
                 val indexed = MediaCatalog.scan(this)
@@ -228,6 +229,7 @@ class MainActivity : ComponentActivity() {
                                                 AppTab.HOME -> Icons.Default.Home
                                                 AppTab.MUSIC -> Icons.Default.LibraryMusic
                                                 AppTab.FILES -> Icons.Default.FolderOpen
+                                                AppTab.DOWNLOADS -> Icons.Default.Download
                                                 AppTab.FAVORITES -> Icons.Default.Favorite
                                                 AppTab.VIDEOS -> Icons.Default.VideoLibrary
                                             }, contentDescription = tab.label
@@ -273,6 +275,26 @@ class MainActivity : ComponentActivity() {
                                         it.folderPath.contains(search, true)
                                 }
                                 AudioList(filtered, currentAudio, favoriteUris, ::playAudio, ::toggleFavorite)
+                            }
+                            AppTab.DOWNLOADS -> {
+                                DownloadCenterScreen(
+                                    message = downloadMessage,
+                                    onStartDirectDownload = { url ->
+                                        val result = com.gaplin.music.download.DirectDownloadManager(this@MainActivity)
+                                            .enqueue(
+                                                com.gaplin.music.download.DirectDownloadRequest(
+                                                    url = url,
+                                                    fileName = "gaplin_${System.currentTimeMillis()}.media"
+                                                )
+                                            )
+                                        downloadMessage = when (result) {
+                                            is com.gaplin.music.download.DirectDownloadResult.Enqueued ->
+                                                "Download adicionado à fila do Android (ID ${result.downloadId})."
+                                            is com.gaplin.music.download.DirectDownloadResult.Rejected ->
+                                                result.reason
+                                        }
+                                    }
+                                )
                             }
                             AppTab.FAVORITES -> {
                                 ScreenHeading("Sua coleção", "${favoriteUris.size} músicas salvas")
