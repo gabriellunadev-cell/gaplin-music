@@ -3,6 +3,9 @@ package com.gaplin.music
 import androidx.compose.animation.core.animateFloat
 
 import android.Manifest
+import android.media.audiofx.Visualizer
+import android.os.Handler
+import android.os.Looper
 import android.content.pm.PackageManager
 import android.content.Intent
 import android.graphics.BitmapFactory
@@ -24,6 +27,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -58,6 +62,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
@@ -70,6 +75,7 @@ import androidx.media3.ui.PlayerView
 import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.atomic.AtomicBoolean
 
 private val Bg = Color(0xFF050D22)
 private val SurfaceDark = Color(0xFF0D1B3A)
@@ -93,6 +99,7 @@ class MainActivity : ComponentActivity() {
     private var sleepTimerJob: Job? = null
     private var audioPermission by mutableStateOf(false)
     private var videoPermission by mutableStateOf(false)
+    private var spectrumPermissionGranted by mutableStateOf(false)
     private var mediaRefreshToken by mutableStateOf(0)
     private var selectedTreeUri by mutableStateOf<Uri?>(null)
 
@@ -115,6 +122,20 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
         refreshPermissions()
+    }
+
+    private val spectrumPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        spectrumPermissionGranted = granted
+    }
+
+    private fun requestSpectrumPermission() {
+        spectrumPermissionGranted =
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        if (!spectrumPermissionGranted) {
+            spectrumPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -151,6 +172,8 @@ class MainActivity : ComponentActivity() {
             var previousVideoOrientation by remember { mutableStateOf(requestedOrientation) }
             var fullscreenVideoLandscape by remember { mutableStateOf(false) }
             var playbackError by remember { mutableStateOf<String?>(null) }
+            var audioSessionId by remember { mutableIntStateOf(0) }
+            var equalizerSnapshot by remember { mutableStateOf(AudioEqualizerController.snapshot()) }
             var scanError by remember { mutableStateOf<String?>(null) }
             var scanInProgress by remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
@@ -195,6 +218,11 @@ class MainActivity : ComponentActivity() {
             DisposableEffect(playerReady) {
                 if (!playerReady) return@DisposableEffect onDispose { }
                 val listener = object : Player.Listener {
+                    @OptIn(UnstableApi::class)
+                    override fun onAudioSessionIdChanged(newAudioSessionId: Int) {
+                        audioSessionId = newAudioSessionId
+                        equalizerSnapshot = AudioEqualizerController.attach(this@MainActivity, newAudioSessionId)
+                    }
                     override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         if (playbackState == Player.STATE_ENDED) playing = false
@@ -656,7 +684,20 @@ class MainActivity : ComponentActivity() {
                                     onAddToPlaylist = { trackToAdd = currentAudio; showPlaylistPicker = true },
                                     onStartTimer = ::startSleepTimer,
                                     onCancelTimer = ::cancelSleepTimer,
-                                    onDismiss = { showMusicPlayer = false }
+                                    onDismiss = { showMusicPlayer = false },
+                                    audioSessionId = audioSessionId,
+                                    spectrumPermissionGranted = spectrumPermissionGranted,
+                                    equalizer = equalizerSnapshot,
+                                    onRequestSpectrumPermission = ::requestSpectrumPermission,
+                                    onEqualizerEnabled = { enabled ->
+                                        equalizerSnapshot = AudioEqualizerController.setEnabled(enabled)
+                                    },
+                                    onEqualizerPreset = { preset ->
+                                        equalizerSnapshot = AudioEqualizerController.applyPreset(preset)
+                                    },
+                                    onEqualizerBandChange = { index, level ->
+                                        equalizerSnapshot = AudioEqualizerController.setBandLevel(index, level)
+                                    }
                                 )
                             }
                         }
@@ -850,6 +891,8 @@ class MainActivity : ComponentActivity() {
         } else {
             ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
         }
+        spectrumPermissionGranted =
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         videoPermission = if (Build.VERSION.SDK_INT >= 34) {
             ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED ||
                 ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED
