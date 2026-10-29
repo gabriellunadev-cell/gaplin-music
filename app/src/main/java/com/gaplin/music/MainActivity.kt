@@ -302,13 +302,21 @@ class MainActivity : ComponentActivity() {
                     playbackError = "O mecanismo de reprodução ainda está iniciando."
                     return
                 }
-                fun mediaItem(item: AudioTrack) = MediaItem.Builder()
-                    .setMediaId(item.uri.toString())
-                    .setUri(item.uri)
-                    .setMediaMetadata(
-                        MediaMetadata.Builder().setTitle(item.title).setArtist(item.artist).setAlbumTitle(item.album).setArtworkUri(item.artworkUri).build()
+                fun mediaItem(item: AudioTrack): MediaItem {
+                    val builder = MediaItem.Builder()
+                        .setMediaId(item.uri.toString())
+                        .setUri(item.uri)
+                    item.mimeType?.takeIf { it.isNotBlank() }?.let(builder::setMimeType)
+                    builder.setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(item.title)
+                            .setArtist(item.artist)
+                            .setAlbumTitle(item.album)
+                            .setArtworkUri(item.artworkUri)
+                            .build()
                     )
-                    .build()
+                    return builder.build()
+                }
                 if (queue.isNotEmpty() && startIndex >= 0) {
                     player.setMediaItems(queue.map(::mediaItem), startIndex, 0L)
                 } else {
@@ -637,7 +645,8 @@ class MainActivity : ComponentActivity() {
                                             artist = "Gaplin Music",
                                             uri = media.uri,
                                             folderPath = "Downloads/Gaplin Music",
-                                            durationMs = 0L
+                                            durationMs = 0L,
+                                            mimeType = media.mimeType
                                         )
                                         playAudio(track, listOf(track))
                                     } else {
