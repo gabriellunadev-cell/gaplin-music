@@ -1,5 +1,7 @@
+import os
 import runpy
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -18,6 +20,17 @@ class YtDlpRunnerOptionsTest(unittest.TestCase):
         sys.modules["yt_dlp"] = fake_module
         sys.modules["yt_dlp.version"] = version_module
         cls.runner = runpy.run_path(str(RUNNER))
+        handle, cls.fake_qjs = tempfile.mkstemp(prefix="gaplin-qjs-")
+        os.close(handle)
+        os.chmod(cls.fake_qjs, 0o700)
+        cls.runner["configure_js_runtime"](cls.fake_qjs)
+
+    def test_quickjs_runtime_is_configured_as_python_api_mapping(self):
+        opts = self.runner["_cli_to_opts"]([])
+        self.assertEqual(
+            opts["js_runtimes"],
+            {"quickjs": {"path": self.fake_qjs}},
+        )
 
     def test_retry_and_format_options_are_mapped(self):
         opts = self.runner["_cli_to_opts"]([
