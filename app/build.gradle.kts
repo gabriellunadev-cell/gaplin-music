@@ -10,8 +10,8 @@ android {
         applicationId = "com.gaplin.music"
         minSdk = 23
         targetSdk = 35
-        versionCode = 12
-        versionName = "1.3.5"
+        versionCode = 13
+        versionName = "1.3.6"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true }
