@@ -52,7 +52,9 @@ fun FileManagerScreen(
             (file.name.contains(search, true) || file.folderPath.contains(search, true))
     }
     val duplicateFiles = duplicates.flatMap { it.files }.distinctBy { it.stableId }
-    val visibleSelection = if (filter == ManagerFilter.DUPLICATES) duplicateFiles else filteredFiles
+    // In duplicate mode, bulk selection targets only extra copies and keeps one copy per group.
+    val duplicateExtras = duplicates.flatMap { group -> group.files.drop(1) }.distinctBy { it.stableId }
+    val visibleSelection = if (filter == ManagerFilter.DUPLICATES) duplicateExtras else filteredFiles
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -145,7 +147,13 @@ fun FileManagerScreen(
                 modifier = Modifier.weight(1f)
             )
             TextButton(onClick = { onSelectAll(visibleSelection) }, enabled = visibleSelection.isNotEmpty()) {
-                Text(if (visibleSelection.isNotEmpty() && visibleSelection.all { it.stableId in selectedUris }) "Desmarcar" else "Selecionar tudo")
+                Text(
+                    when {
+                        visibleSelection.isNotEmpty() && visibleSelection.all { it.stableId in selectedUris } -> "Desmarcar"
+                        filter == ManagerFilter.DUPLICATES -> "Selecionar cópias extras"
+                        else -> "Selecionar tudo"
+                    }
+                )
             }
         }
 
@@ -183,7 +191,11 @@ fun FileManagerScreen(
                                 Spacer(Modifier.width(8.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text("${group.files.size} cópias idênticas · ${group.kind.label}", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-                                    Text("${formatFileBytes(group.totalBytes)} ocupados no total", color = ManagerMuted, fontSize = 10.sp)
+                                    Text(
+                                        "Até ${formatFileBytes(group.totalBytes - (group.files.maxOfOrNull { it.sizeBytes } ?: 0L))} liberáveis mantendo uma cópia",
+                                        color = ManagerMuted,
+                                        fontSize = 10.sp
+                                    )
                                 }
                             }
                             Spacer(Modifier.height(6.dp))
