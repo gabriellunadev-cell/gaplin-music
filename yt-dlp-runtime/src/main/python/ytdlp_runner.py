@@ -4,6 +4,7 @@ Derived from the MIT-licensed yt-dlp-android Java/Python bridge by
 ffmpegkit-maintained. CLI-style options are translated explicitly so no
 unsupported option is silently discarded.
 """
+import json
 import yt_dlp
 from yt_dlp.version import __version__ as YT_DLP_VERSION
 
@@ -129,3 +130,69 @@ def execute_debug(url, output_template, cli_flags, log_callback=None, progress_c
         opts['logger'] = Logger()
     with yt_dlp.YoutubeDL(opts) as downloader:
         return downloader.download([url])
+
+
+def _summarize_media_info(info):
+    """Return safe, non-secret metadata used to decide whether a media item can be downloaded."""
+    if not info:
+        raise yt_dlp.utils.DownloadError("The source returned no media metadata")
+
+    entries = info.get('entries')
+    is_playlist = info.get('_type') in ('playlist', 'multi_video') or entries is not None
+    if is_playlist:
+        valid_entries = [entry for entry in (entries or []) if entry]
+        return {
+            'id': str(info.get('id') or ''),
+            'title': str(info.get('title') or 'Playlist'),
+            'is_playlist': True,
+            'entry_count': len(valid_entries),
+            'availability': str(info.get('availability') or ''),
+            'audio_formats': 0,
+            'progressive_formats': 0,
+        }
+
+    formats = info.get('formats') or []
+    available = [
+        item for item in formats
+        if item.get('url') and not item.get('has_drm')
+    ]
+    audio_formats = [
+        item for item in available
+        if item.get('acodec') not in (None, 'none')
+    ]
+    progressive_formats = [
+        item for item in available
+        if item.get('vcodec') not in (None, 'none')
+        and item.get('acodec') not in (None, 'none')
+    ]
+
+    return {
+        'id': str(info.get('id') or ''),
+        'title': str(info.get('title') or 'Mídia'),
+        'is_playlist': False,
+        'entry_count': 1,
+        'availability': str(info.get('availability') or ''),
+        'audio_formats': len(audio_formats),
+        'progressive_formats': len(progressive_formats),
+        'format_count': len(available),
+    }
+
+
+def inspect_media(url, cli_flags=None):
+    """
+    Validate a media URL without downloading it.
+    This surfaces deleted/private/geo-restricted items before they enter the queue.
+    """
+    opts = _cli_to_opts(cli_flags or [])
+    opts.update({
+        'quiet': True,
+        'no_warnings': True,
+        'skip_download': True,
+        'ignoreerrors': False,
+        'retries': opts.get('retries', 2),
+        'extractor_retries': opts.get('extractor_retries', 2),
+        'socket_timeout': 20,
+    })
+    with yt_dlp.YoutubeDL(opts) as downloader:
+        info = downloader.extract_info(url, download=False)
+    return json.dumps(_summarize_media_info(info), ensure_ascii=False)
