@@ -12,7 +12,10 @@ data class AudioTrack(
     val artist: String,
     val uri: Uri,
     val folderPath: String,
-    val durationMs: Long
+    val durationMs: Long,
+    val album: String = "Álbum desconhecido",
+    val albumId: Long = -1L,
+    val artworkUri: Uri? = null
 )
 
 data class VideoEntry(
@@ -48,10 +51,14 @@ data class MediaSnapshot(
 
 object MediaCatalog {
     @Suppress("DEPRECATION")
-    fun scan(context: Context): MediaSnapshot {
+    fun scan(
+        context: Context,
+        includeAudio: Boolean = true,
+        includeVideo: Boolean = true
+    ): MediaSnapshot {
         return MediaSnapshot(
-            audio = scanAudio(context),
-            videos = scanVideos(context)
+            audio = if (includeAudio) scanAudio(context) else emptyList(),
+            videos = if (includeVideo) scanVideos(context) else emptyList()
         )
     }
 
@@ -63,6 +70,8 @@ object MediaCatalog {
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.ALBUM_ID,
             MediaStore.Audio.Media.DURATION
         )
         val pathColumn = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
@@ -79,6 +88,8 @@ object MediaCatalog {
             val id = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val title = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
             val artist = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+            val album = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+            val albumId = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
             val duration = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val path = cursor.getColumnIndexOrThrow(pathColumn)
             while (cursor.moveToNext()) {
@@ -88,7 +99,12 @@ object MediaCatalog {
                     artist = cursor.getString(artist)?.takeIf { it.isNotBlank() && it != "<unknown>" } ?: "Artista desconhecido",
                     uri = ContentUris.withAppendedId(collection, cursor.getLong(id)),
                     folderPath = normalizePath(rawPath),
-                    durationMs = cursor.getLong(duration)
+                    durationMs = cursor.getLong(duration),
+                    album = cursor.getString(album)?.takeIf(String::isNotBlank) ?: "Álbum desconhecido",
+                    albumId = cursor.getLong(albumId),
+                    artworkUri = cursor.getLong(albumId).takeIf { it > 0L }?.let {
+                        ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), it)
+                    }
                 )
             }
         }
@@ -151,32 +167,43 @@ object MediaCatalog {
         val videos = mutableListOf<VideoEntry>()
         val audioExt = setOf("mp3", "m4a", "aac", "flac", "wav", "ogg", "opus")
         val videoExt = setOf("mp4", "m4v", "mkv", "webm", "3gp", "mpeg", "mpg")
-        fun visit(directory: DocumentFile, depth: Int) {
+        fun visit(directory: DocumentFile, depth: Int, relativePath: String) {
             if (depth > 12 || !directory.isDirectory) return
-            directory.listFiles().forEach { file ->
-                if (file.isDirectory) visit(file, depth + 1)
-                else if (file.isFile) {
+            val children = try {
+                directory.listFiles()
+            } catch (_: SecurityException) {
+                return
+            } catch (_: IllegalStateException) {
+                return
+            }
+            children.forEach { file ->
+                if (file.isDirectory) {
+                    val childName = file.name?.takeIf(String::isNotBlank) ?: return@forEach
+                    visit(file, depth + 1, listOf(relativePath, childName).filter(String::isNotBlank).joinToString("/"))
+                } else if (file.isFile) {
                     val name = file.name ?: return@forEach
                     val ext = name.substringAfterLast('.', "").lowercase()
-                    val parent = file.parentFile?.name ?: root.name ?: "Pasta selecionada"
+                    val folder = "SAF: $relativePath"
+                    val folderName = relativePath.substringAfterLast('/').ifBlank { root.name ?: "Pasta selecionada" }
                     when (ext) {
                         in audioExt -> audio += AudioTrack(
                             title = name.substringBeforeLast('.'),
                             artist = "Arquivo local",
                             uri = file.uri,
-                            folderPath = "SAF: $parent",
+                            folderPath = folder,
                             durationMs = 0L
                         )
                         in videoExt -> {
                             val match = Regex("(?i)S(\\d{1,2})E(\\d{1,3})").find(name)
                                 ?: Regex("(?i)(\\d{1,2})x(\\d{1,3})").find(name)
+                                ?: Regex("(?i)(?:temporada|season)[ ._-]*(\\d+).*?(?:epis[oó]dio|episode|ep)[ ._-]*(\\d+)").find(name)
                             videos += VideoEntry(
-                                title = name.substringBeforeLast('.').replace(Regex("[._]+"), " "),
+                                title = name.substringBeforeLast('.').replace(Regex("[._]+"), " ").trim(),
                                 uri = file.uri,
-                                folderPath = "SAF: $parent",
-                                folderName = parent,
+                                folderPath = folder,
+                                folderName = folderName,
                                 durationMs = 0L,
-                                sizeBytes = file.length(),
+                                sizeBytes = runCatching { file.length() }.getOrDefault(0L),
                                 season = match?.groupValues?.getOrNull(1)?.toIntOrNull(),
                                 episode = match?.groupValues?.getOrNull(2)?.toIntOrNull()
                             )
@@ -185,7 +212,7 @@ object MediaCatalog {
                 }
             }
         }
-        visit(root, 0)
+        visit(root, 0, root.name?.takeIf(String::isNotBlank) ?: "Pasta selecionada")
         return MediaSnapshot(audio, videos)
     }
 
