@@ -1,22 +1,31 @@
 package com.gaplin.music.download
 
 import android.content.Context
+import android.util.Log
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 
 /**
  * Initializes native tools and refreshes the bundled yt-dlp stable release.
- * Call from a background dispatcher; the library serializes its updater internally.
+ * Call from a background dispatcher.
  */
 object YtDlpEngine {
+    private const val TAG = "YtDlpEngine"
+
     fun initialize(context: Context) {
         val appContext = context.applicationContext
         YoutubeDL.getInstance().init(appContext)
         FFmpeg.getInstance().init(appContext)
-        YoutubeDL.getInstance().updateYoutubeDL(
-            appContext,
-            YoutubeDL.UpdateChannel.STABLE
-        )
+
+        // A temporary GitHub/API outage must not disable an otherwise usable downloader.
+        runCatching {
+            YoutubeDL.getInstance().updateYoutubeDL(
+                appContext,
+                YoutubeDL.UpdateChannel.STABLE
+            )
+        }.onFailure { error ->
+            Log.w(TAG, "Could not refresh yt-dlp; keeping the installed engine", error)
+        }
     }
 
     fun readableError(error: Throwable, fallback: String): String {
