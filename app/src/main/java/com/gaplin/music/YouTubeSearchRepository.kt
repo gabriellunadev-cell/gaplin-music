@@ -33,8 +33,9 @@ object YouTubeSearchRepository {
             connectTimeout = 15_000
             readTimeout = 20_000
             instanceFollowRedirects = true
-            setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36")
+            setRequestProperty("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
             setRequestProperty("Accept-Language", "pt-BR,pt;q=0.9,en;q=0.7")
+            setRequestProperty("Referer", "https://www.youtube.com/")
             setRequestProperty("Accept", "text/html,application/xhtml+xml")
         }
 
@@ -55,39 +56,59 @@ object YouTubeSearchRepository {
     }
 
     private fun extractInitialData(html: String): JSONObject {
-        val markers = listOf(
-            "var ytInitialData =",
-            "window[\"ytInitialData\"] =",
-            "ytInitialData ="
+        // YouTube can inject unrelated inline scripts between its bootstrap data
+        // and other JSON blocks. Only parse an object immediately following an
+        // actual ytInitialData assignment.
+        val assignment = Regex(
+            """(?:var\\s+ytInitialData|let\\s+ytInitialData|const\\s+ytInitialData|window\\[\"ytInitialData\"\\]|window\\['ytInitialData'\\]|ytInitialData)\\s*="""
         )
-        val markerIndex = markers.asSequence().map { html.indexOf(it) }.firstOrNull { it >= 0 }
-            ?: throw IllegalStateException("O YouTube mudou a página de pesquisa. Tente novamente mais tarde.")
-        val jsonStart = html.indexOf('{', markerIndex)
-        if (jsonStart < 0) throw IllegalStateException("Não foi possível interpretar os resultados do YouTube.")
+        val matches = assignment.findAll(html).toList()
+        for (match in matches) {
+            var jsonStart = match.range.last + 1
+            while (jsonStart < html.length && html[jsonStart].isWhitespace()) jsonStart++
+            if (jsonStart >= html.length || html[jsonStart] != '{') continue
 
-        var depth = 0
-        var inString = false
-        var escaped = false
-        for (index in jsonStart until html.length) {
-            val char = html[index]
-            if (inString) {
-                when {
-                    escaped -> escaped = false
-                    char == '\\' -> escaped = true
-                    char == '"' -> inString = false
-                }
-            } else {
-                when (char) {
-                    '"' -> inString = true
-                    '{' -> depth++
-                    '}' -> {
-                        depth--
-                        if (depth == 0) return JSONObject(html.substring(jsonStart, index + 1))
+            var depth = 0
+            var inString = false
+            var escaped = false
+            for (index in jsonStart until html.length) {
+                val char = html[index]
+                if (inString) {
+                    when {
+                        escaped -> escaped = false
+                        char == '\\\\' -> escaped = true
+                        char == '"' -> inString = false
+                    }
+                } else {
+                    when (char) {
+                        '"' -> inString = true
+                        '{' -> depth++
+                        '}' -> {
+                            depth--
+                            if (depth == 0) {
+                                val parsed = runCatching {
+                                    JSONObject(html.substring(jsonStart, index + 1))
+                                }.getOrNull()
+                                if (parsed != null) return parsed
+                                break
+                            }
+                        }
                     }
                 }
             }
         }
-        throw IllegalStateException("A resposta do YouTube veio incompleta.")
+
+        val lower = html.lowercase()
+        when {
+            "consent.youtube.com" in lower || "before you continue to youtube" in lower ->
+                throw IllegalStateException("O YouTube pediu confirmação de consentimento. Tente novamente mais tarde.")
+            "unusual traffic" in lower || "automated requests" in lower ->
+                throw IllegalStateException("O YouTube limitou temporariamente esta pesquisa. Aguarde um pouco e tente novamente.")
+            "sign in to confirm" in lower ->
+                throw IllegalStateException("O YouTube exige uma verificação para mostrar estes resultados.")
+            else ->
+                throw IllegalStateException("O YouTube não entregou resultados em um formato reconhecido. Tente novamente.")
+        }
     }
 
     private fun collectRenderers(
