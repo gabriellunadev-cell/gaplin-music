@@ -19,6 +19,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -26,6 +27,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -70,6 +72,7 @@ import androidx.media3.ui.PlayerView
 import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
+import com.gaplin.music.playback.GaplinAudioSpectrum
 
 private val Bg = Color(0xFF050D22)
 private val SurfaceDark = Color(0xFF0D1B3A)
@@ -1413,141 +1416,212 @@ private fun TrackArtwork(track: AudioTrack, modifier: Modifier = Modifier) {
 
 @Composable
 private fun ParticleAudioVisualizer(
+    track: AudioTrack,
     isPlaying: Boolean,
     progress: Float,
     modifier: Modifier = Modifier
 ) {
-    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "gaplin-neural-spectrum")
+    val palette = remember {
+        listOf(
+            Color(0xFF08DFFF),
+            Color(0xFF237BFF),
+            Color(0xFF7657FF),
+            Color(0xFFCC35F5),
+            Color(0xFFFF42A8),
+            Color(0xFFFFA34A)
+        )
+    }
+    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "gaplin-neural-orbit")
     val phase by transition.animateFloat(
         initialValue = 0f,
         targetValue = (Math.PI * 2.0).toFloat(),
         animationSpec = androidx.compose.animation.core.infiniteRepeatable(
             animation = androidx.compose.animation.core.tween(
-                durationMillis = if (isPlaying) 5200 else 11000,
+                durationMillis = if (isPlaying) 4200 else 11500,
                 easing = androidx.compose.animation.core.LinearEasing
             )
         ),
-        label = "neural-spectrum-phase"
+        label = "neural-orbit-phase"
     )
-    val motion = if (isPlaying) 1f else 0.22f
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val centerY = h * 0.51f
-        val columns = 92
-        val depthRows = 31
-        val p = phase + progress * 5.2f
-        val palette = listOf(
-            Color(0xFF13D8FF),
-            Color(0xFF397BFF),
-            Color(0xFF8B4DFF),
-            Color(0xFFED36F5),
-            Color(0xFFFF55B8)
-        )
 
-        fun spectrum(x: Float): Float {
-            val a = kotlin.math.sin(x * 7.2f - p * 1.15f)
-            val b = kotlin.math.sin(x * 13.4f + p * 0.82f + 0.7f)
-            val c = kotlin.math.cos(x * 22.0f - p * 1.7f)
-            val formant = 0.48f + 0.25f * a + 0.17f * b + 0.10f * c
-            val envelope = kotlin.math.pow(kotlin.math.sin(Math.PI * x).toFloat().coerceAtLeast(0f), 0.58f)
-            return (formant * envelope * motion).coerceAtLeast(0f)
-        }
+    var bands by remember(track.uri) { mutableStateOf(GaplinAudioSpectrum.readBands()) }
+    var level by remember(track.uri) { mutableStateOf(GaplinAudioSpectrum.readLevel()) }
 
-        fun colorAt(x: Float): Color {
-            val scaled = x.coerceIn(0f, 1f) * (palette.size - 1)
-            val index = scaled.toInt().coerceIn(0, palette.lastIndex - 1)
-            return androidx.compose.ui.graphics.lerp(palette[index], palette[index + 1], scaled - index)
-        }
-
-        // Soft atmospheric light behind the particle sculpture.
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(Color(0x663B4DFF), Color(0x22201675), Color.Transparent),
-                center = androidx.compose.ui.geometry.Offset(w * 0.5f, centerY),
-                radius = w * 0.49f
-            ),
-            radius = w * 0.49f,
-            center = androidx.compose.ui.geometry.Offset(w * 0.5f, centerY)
-        )
-
-        // Several depth layers form a continuous, volumetric sound field.
-        for (layer in 0 until 4) {
-            val layerOffset = (layer - 1.5f) * h * 0.035f
-            val layerAlpha = 0.16f + (3 - layer) * 0.035f
-            val path = androidx.compose.ui.graphics.Path()
-            for (i in 0..columns) {
-                val xFactor = i / columns.toFloat()
-                val x = w * (0.055f + xFactor * 0.89f)
-                val envelope = spectrum(xFactor)
-                val carrier = kotlin.math.sin(xFactor * 12.5f - p * 1.25f + layer * 0.55f)
-                val secondary = kotlin.math.cos(xFactor * 25f + p * 0.72f - layer)
-                val y = centerY + layerOffset +
-                    (carrier * 0.105f + secondary * 0.028f) * h * envelope
-                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+    // Pull the latest PCM spectrum on the UI thread and smooth attack/release for fluid motion.
+    LaunchedEffect(track.uri, isPlaying) {
+        while (true) {
+            val incoming = GaplinAudioSpectrum.readBands()
+            val previous = bands
+            bands = FloatArray(incoming.size) { index ->
+                val current = previous.getOrElse(index) { 0f }
+                val target = if (isPlaying) incoming[index] else 0f
+                current + (target - current) * if (target > current) 0.48f else 0.16f
             }
-            drawPath(
-                path = path,
-                brush = Brush.horizontalGradient(palette),
-                style = androidx.compose.ui.graphics.drawscope.Stroke(
-                    width = if (layer == 1 || layer == 2) 1.5.dp.toPx() else 0.8.dp.toPx()
+            val targetLevel = if (isPlaying) GaplinAudioSpectrum.readLevel() else 0f
+            level += (targetLevel - level) * if (targetLevel > level) 0.44f else 0.14f
+            delay(33L)
+        }
+    }
+
+    Box(modifier = modifier) {
+        Canvas(Modifier.fillMaxSize()) {
+            val width = size.width
+            val height = size.height
+            val minDimension = minOf(width, height)
+            val center = androidx.compose.ui.geometry.Offset(width * 0.5f, height * 0.5f)
+            val baseRadius = minDimension * 0.355f
+            val ringWidth = minDimension * 0.255f
+            val motion = if (isPlaying) 1f else 0.18f
+            val p = phase + progress * 1.6f
+            val low = bands.take(8).average().toFloat()
+            val mid = bands.drop(8).take(16).average().toFloat()
+            val high = bands.drop(24).average().toFloat()
+
+            fun colorAt(position: Float): Color {
+                val scaled = position.coerceIn(0f, 1f) * (palette.size - 1)
+                val index = scaled.toInt().coerceIn(0, palette.lastIndex - 1)
+                return androidx.compose.ui.graphics.lerp(palette[index], palette[index + 1], scaled - index)
+            }
+
+            // Ambient glow behind the particle sculpture.
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0x553B4DFF),
+                        Color(0x302A1C78),
+                        Color(0x14201955),
+                        Color.Transparent
+                    ),
+                    center = center,
+                    radius = minDimension * 0.58f
                 ),
-                alpha = layerAlpha
+                radius = minDimension * 0.58f,
+                center = center
+            )
+
+            // Six animated orbital filaments create the luminous 3D sound ring.
+            val angularSteps = 168
+            for (layer in 0 until 6) {
+                val layerPosition = layer / 5f
+                val orbitRadius = baseRadius + (layerPosition - 0.5f) * ringWidth
+                val path = androidx.compose.ui.graphics.Path()
+                for (step in 0..angularSteps) {
+                    val angle = 2f * Math.PI.toFloat() * step / angularSteps
+                    val normalized = step / angularSteps.toFloat()
+                    val band = bands.getOrElse((normalized * bands.size).toInt().coerceIn(0, bands.lastIndex)) { 0f }
+                    val undulation = kotlin.math.sin(angle * (4.5f + layer * 0.24f) - p * 1.25f + layer) * 0.022f
+                    val spectralLift = (low * 0.11f + mid * 0.075f + high * 0.045f + band * 0.10f) * motion
+                    val radius = orbitRadius + (undulation + spectralLift) * minDimension
+                    val x = center.x + kotlin.math.cos(angle) * radius
+                    val y = center.y + kotlin.math.sin(angle) * radius * 0.82f
+                    if (step == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+                drawPath(
+                    path = path,
+                    brush = Brush.sweepGradient(palette, center),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(
+                        width = if (layer == 2 || layer == 3) 1.55.dp.toPx() else 0.85.dp.toPx(),
+                        cap = androidx.compose.ui.graphics.StrokeCap.Round
+                    ),
+                    alpha = if (isPlaying) 0.34f + layer * 0.045f else 0.17f
+                )
+            }
+
+            // Dense polar particle mesh. Frequency bands control local radius, brightness and pulse.
+            val radialRows = if (width < 520f) 20 else 25
+            val angularCount = if (width < 520f) 112 else 144
+            for (row in 0 until radialRows) {
+                val depth = row / (radialRows - 1f)
+                val perspective = 0.48f + 0.52f * kotlin.math.sin(Math.PI.toFloat() * depth)
+                val depthOffset = (depth - 0.5f) * minDimension * 0.075f
+                for (column in 0 until angularCount) {
+                    val anglePosition = column / angularCount.toFloat()
+                    val angle = 2f * Math.PI.toFloat() * anglePosition
+                    val bandIndex = (anglePosition * bands.size).toInt().coerceIn(0, bands.lastIndex)
+                    val energy = bands[bandIndex].coerceIn(0f, 1f)
+                    val bassResponse = low.coerceIn(0f, 1f)
+                    val midResponse = mid.coerceIn(0f, 1f)
+                    val trebleResponse = high.coerceIn(0f, 1f)
+                    val localResponse = (energy * 0.68f + bassResponse * 0.20f +
+                        midResponse * 0.08f + trebleResponse * 0.04f).coerceIn(0f, 1f)
+                    val waveA = kotlin.math.sin(angle * 5.2f - p * 1.18f + depth * 4.4f)
+                    val waveB = kotlin.math.cos(angle * 11.5f + p * 0.74f - depth * 5.1f)
+                    val crossWave = kotlin.math.sin(depth * 9.2f + angle * 3.1f - p * 0.56f)
+                    val displacement = (
+                        waveA * 0.024f + waveB * 0.012f + crossWave * 0.009f +
+                            localResponse * (0.12f + bassResponse * 0.12f)
+                        ) * minDimension * motion
+                    val radius = baseRadius + (depth - 0.5f) * ringWidth + displacement
+                    val x = center.x + kotlin.math.cos(angle) * radius
+                    val y = center.y + kotlin.math.sin(angle) * radius * 0.82f +
+                        depthOffset + waveA * minDimension * 0.014f * motion
+                    val pulse = 0.70f + 0.30f * kotlin.math.sin(p * 1.65f + column * 0.095f + row * 0.23f)
+                    val frontLight = 0.62f + 0.38f * kotlin.math.cos(angle - 0.35f)
+                    val particleColor = colorAt(anglePosition)
+                    val particleRadius = (0.45f + energy * 1.45f + pulse * 0.42f) * perspective
+                    val alpha = ((0.13f + pulse * 0.34f + localResponse * 0.28f) *
+                        frontLight * perspective).coerceIn(0.07f, 0.90f)
+
+                    if (energy > 0.16f || localResponse > 0.18f) {
+                        drawCircle(
+                            color = particleColor.copy(alpha = alpha * 0.15f),
+                            radius = particleRadius * (2.8f + energy),
+                            center = androidx.compose.ui.geometry.Offset(x, y)
+                        )
+                    }
+                    drawCircle(
+                        color = particleColor.copy(alpha = alpha),
+                        radius = particleRadius,
+                        center = androidx.compose.ui.geometry.Offset(x, y)
+                    )
+                }
+            }
+
+            // Small sparks orbit outside the main mesh for depth and motion.
+            for (spark in 0 until 58) {
+                val angle = spark * 2.39996f + p * 0.10f
+                val orbit = baseRadius + ringWidth * 0.63f +
+                    kotlin.math.sin(p * 0.8f + spark * 1.71f) * minDimension * 0.025f
+                val x = center.x + kotlin.math.cos(angle) * orbit
+                val y = center.y + kotlin.math.sin(angle) * orbit * 0.82f
+                val sparkColor = colorAt((spark / 58f + progress * 0.08f) % 1f)
+                val sparkAlpha = (0.18f + level * 0.56f) * if (isPlaying) 1f else 0.35f
+                drawCircle(
+                    color = sparkColor.copy(alpha = sparkAlpha.coerceIn(0f, 0.75f)),
+                    radius = (0.7f + level * 1.7f) * (0.65f + (spark % 4) * 0.12f),
+                    center = androidx.compose.ui.geometry.Offset(x, y)
+                )
+            }
+
+            // Bright circular energy core around the album artwork.
+            drawCircle(
+                brush = Brush.sweepGradient(palette, center),
+                radius = minDimension * 0.268f,
+                center = center,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.2.dp.toPx()),
+                alpha = if (isPlaying) 0.88f else 0.42f
+            )
+            drawCircle(
+                color = Color(0xFF9C58FF).copy(alpha = if (isPlaying) 0.22f else 0.10f),
+                radius = minDimension * 0.278f,
+                center = center,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 5.dp.toPx())
             )
         }
 
-        // Dense but restrained particle mesh; perspective makes the field feel 3D.
-        for (row in 0 until depthRows) {
-            val depth = row / (depthRows - 1f)
-            val perspective = 0.34f + 0.66f * kotlin.math.sin(Math.PI * depth).toFloat()
-            val depthY = (depth - 0.5f) * h * 0.60f
-            for (column in 0 until columns) {
-                val xFactor = column / (columns - 1f)
-                val x = w * (0.055f + xFactor * 0.89f)
-                val envelope = spectrum(xFactor)
-                val waveA = kotlin.math.sin(xFactor * 13f - p * 1.25f + depth * 4.2f)
-                val waveB = kotlin.math.cos(xFactor * 23f + p * 0.78f - depth * 5.4f)
-                val crossWave = kotlin.math.sin(depth * 9f + xFactor * 8f - p * 0.55f)
-                val displacement = (waveA * 0.105f + waveB * 0.027f + crossWave * 0.018f) * h * envelope
-                val y = centerY + depthY + displacement
-                val pulse = 0.68f + 0.32f * kotlin.math.sin(p * 1.8f + column * 0.12f + row * 0.19f)
-                val edge = kotlin.math.sin(Math.PI * xFactor).toFloat().coerceAtLeast(0f)
-                val color = colorAt(xFactor)
-                val radius = (0.55f + 0.95f * pulse) * perspective
-                val alpha = (0.20f + 0.55f * edge * pulse) * (0.48f + 0.52f * envelope.coerceAtMost(1f))
-                drawCircle(
-                    color = color.copy(alpha = alpha * 0.12f),
-                    radius = radius * 3.0f,
-                    center = androidx.compose.ui.geometry.Offset(x, y)
-                )
-                drawCircle(
-                    color = color.copy(alpha = alpha),
-                    radius = radius,
-                    center = androidx.compose.ui.geometry.Offset(x, y)
-                )
-            }
+        // Keep the real album artwork visible as the visualizer's central AI core.
+        Box(
+            Modifier
+                .size(170.dp)
+                .align(Alignment.Center)
+                .clip(CircleShape)
+                .background(Color(0xFF070D20))
+                .border(2.dp, Brush.sweepGradient(palette), CircleShape)
+                .padding(5.dp)
+                .clip(CircleShape)
+        ) {
+            TrackArtwork(track, Modifier.fillMaxSize().clip(CircleShape))
         }
-
-        // A crisp luminous signal travels through the center of the mesh.
-        val signal = androidx.compose.ui.graphics.Path()
-        for (i in 0..columns) {
-            val xFactor = i / columns.toFloat()
-            val x = w * (0.055f + xFactor * 0.89f)
-            val env = spectrum(xFactor)
-            val y = centerY + kotlin.math.sin(xFactor * 15f - p * 1.45f) * h * 0.12f * env
-            if (i == 0) signal.moveTo(x, y) else signal.lineTo(x, y)
-        }
-        drawPath(
-            signal,
-            brush = Brush.horizontalGradient(
-                listOf(Color(0xFF24DFFF), Color(0xFF7864FF), Color(0xFFFF4BD8))
-            ),
-            style = androidx.compose.ui.graphics.drawscope.Stroke(
-                width = 1.15.dp.toPx(),
-                cap = androidx.compose.ui.graphics.StrokeCap.Round
-            ),
-            alpha = if (isPlaying) 0.88f else 0.42f
-        )
     }
 }
 
@@ -1574,6 +1648,7 @@ private fun NowPlayingDialog(
     var volume by remember { mutableStateOf(player.volume) }
     var shuffle by remember { mutableStateOf(player.shuffleModeEnabled) }
     var repeatMode by remember { mutableStateOf(player.repeatMode) }
+    var trackMenuExpanded by remember(track.uri) { mutableStateOf(false) }
     LaunchedEffect(player, track.uri) {
         while (true) {
             if (!scrubbing) {
@@ -1615,6 +1690,7 @@ private fun NowPlayingDialog(
 
                 Spacer(Modifier.height(8.dp))
                 ParticleAudioVisualizer(
+                    track = track,
                     isPlaying = player.isPlaying,
                     progress = sliderValue,
                     modifier = Modifier.fillMaxWidth().weight(1f).heightIn(min = 180.dp, max = 330.dp)
@@ -1624,12 +1700,28 @@ private fun NowPlayingDialog(
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     TrackArtwork(track, Modifier.size(58.dp).clip(RoundedCornerShape(12.dp)))
                     Column(Modifier.weight(1f).padding(start = 12.dp, end = 6.dp)) {
-                        Text(track.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(track.title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(track.artist, color = TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(track.album, color = VioletSoft, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     IconButton(onClick = onFavorite) {
-                        Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, tint = if (favorite) Violet else Color.White, modifier = Modifier.size(26.dp))
+                        Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, "Favoritar", tint = if (favorite) Violet else Color.White, modifier = Modifier.size(25.dp))
+                    }
+                    Box {
+                        IconButton(onClick = { trackMenuExpanded = true }) {
+                            Icon(Icons.Default.MoreVert, "Mais opções", tint = Color.White)
+                        }
+                        DropdownMenu(
+                            expanded = trackMenuExpanded,
+                            onDismissRequest = { trackMenuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Adicionar à playlist") },
+                                onClick = {
+                                    trackMenuExpanded = false
+                                    onAddToPlaylist()
+                                }
+                            )
+                        }
                     }
                 }
 
