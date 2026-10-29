@@ -104,12 +104,12 @@ object YouTubeSearchRepository {
                 }
                 value.optJSONObject("playlistRenderer")?.let { renderer ->
                     parsePlaylist(renderer)?.let { item ->
-                        if (seen.add("playlist:\${item.id}")) output += item
+                        if (seen.add("playlist:${item.id}")) output += item
                     }
                 }
                 value.optJSONObject("channelRenderer")?.let { renderer ->
                     parseChannel(renderer)?.let { item ->
-                        if (seen.add("channel:\${item.id}")) output += item
+                        if (seen.add("channel:${item.id}")) output += item
                     }
                 }
                 val keys = value.keys()
