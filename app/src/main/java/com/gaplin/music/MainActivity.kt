@@ -1417,54 +1417,107 @@ private fun ParticleAudioVisualizer(
     progress: Float,
     modifier: Modifier = Modifier
 ) {
-    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "audio-particles")
+    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "gaplin-neural-spectrum")
     val phase by transition.animateFloat(
         initialValue = 0f,
         targetValue = (Math.PI * 2.0).toFloat(),
         animationSpec = androidx.compose.animation.core.infiniteRepeatable(
             animation = androidx.compose.animation.core.tween(
-                durationMillis = if (isPlaying) 4200 else 9000,
+                durationMillis = if (isPlaying) 5200 else 11000,
                 easing = androidx.compose.animation.core.LinearEasing
             )
         ),
-        label = "particle-phase"
+        label = "neural-spectrum-phase"
     )
-    val energy = if (isPlaying) 1f else 0.16f
+    val motion = if (isPlaying) 1f else 0.22f
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
-        val centerY = h * 0.52f
-        val rows = 27
-        val columns = 64
-        val phaseShift = phase + progress * 5.5f
-        val colors = listOf(
-            Color(0xFF176BFF), Color(0xFF19C8FF),
-            Color(0xFFB52CFF), Color(0xFFFF36C8),
-            Color(0xFFFF8A35)
+        val centerY = h * 0.51f
+        val columns = 92
+        val depthRows = 31
+        val p = phase + progress * 5.2f
+        val palette = listOf(
+            Color(0xFF13D8FF),
+            Color(0xFF397BFF),
+            Color(0xFF8B4DFF),
+            Color(0xFFED36F5),
+            Color(0xFFFF55B8)
         )
-        for (row in 0 until rows) {
-            val rowFactor = row.toFloat() / (rows - 1)
+
+        fun spectrum(x: Float): Float {
+            val a = kotlin.math.sin(x * 7.2f - p * 1.15f)
+            val b = kotlin.math.sin(x * 13.4f + p * 0.82f + 0.7f)
+            val c = kotlin.math.cos(x * 22.0f - p * 1.7f)
+            val formant = 0.48f + 0.25f * a + 0.17f * b + 0.10f * c
+            val envelope = kotlin.math.pow(kotlin.math.sin(Math.PI * x).toFloat().coerceAtLeast(0f), 0.58f)
+            return (formant * envelope * motion).coerceAtLeast(0f)
+        }
+
+        fun colorAt(x: Float): Color {
+            val scaled = x.coerceIn(0f, 1f) * (palette.size - 1)
+            val index = scaled.toInt().coerceIn(0, palette.lastIndex - 1)
+            return androidx.compose.ui.graphics.lerp(palette[index], palette[index + 1], scaled - index)
+        }
+
+        // Soft atmospheric light behind the particle sculpture.
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(Color(0x663B4DFF), Color(0x22201675), Color.Transparent),
+                center = androidx.compose.ui.geometry.Offset(w * 0.5f, centerY),
+                radius = w * 0.49f
+            ),
+            radius = w * 0.49f,
+            center = androidx.compose.ui.geometry.Offset(w * 0.5f, centerY)
+        )
+
+        // Several depth layers form a continuous, volumetric sound field.
+        for (layer in 0 until 4) {
+            val layerOffset = (layer - 1.5f) * h * 0.035f
+            val layerAlpha = 0.16f + (3 - layer) * 0.035f
+            val path = androidx.compose.ui.graphics.Path()
+            for (i in 0..columns) {
+                val xFactor = i / columns.toFloat()
+                val x = w * (0.055f + xFactor * 0.89f)
+                val envelope = spectrum(xFactor)
+                val carrier = kotlin.math.sin(xFactor * 12.5f - p * 1.25f + layer * 0.55f)
+                val secondary = kotlin.math.cos(xFactor * 25f + p * 0.72f - layer)
+                val y = centerY + layerOffset +
+                    (carrier * 0.105f + secondary * 0.028f) * h * envelope
+                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            drawPath(
+                path = path,
+                brush = Brush.horizontalGradient(palette),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                    width = if (layer == 1 || layer == 2) 1.5.dp.toPx() else 0.8.dp.toPx()
+                ),
+                alpha = layerAlpha
+            )
+        }
+
+        // Dense but restrained particle mesh; perspective makes the field feel 3D.
+        for (row in 0 until depthRows) {
+            val depth = row / (depthRows - 1f)
+            val perspective = 0.34f + 0.66f * kotlin.math.sin(Math.PI * depth).toFloat()
+            val depthY = (depth - 0.5f) * h * 0.60f
             for (column in 0 until columns) {
-                val xFactor = column.toFloat() / (columns - 1)
-                val x = w * (0.035f + xFactor * 0.93f)
-                val edgeFade = kotlin.math.sin(Math.PI * xFactor).toFloat().coerceAtLeast(0f)
-                val carrier = kotlin.math.sin(xFactor * 17.0 + phaseShift * 1.35 + rowFactor * 2.4).toFloat()
-                val ripple = kotlin.math.cos(xFactor * 29.0 - phaseShift * 1.8 + rowFactor * 4.0).toFloat()
-                val envelope = (0.24f + 0.76f * edgeFade) * energy
-                val y = centerY +
-                    (rowFactor - 0.5f) * h * 0.64f +
-                    carrier * h * 0.105f * envelope +
-                    ripple * h * 0.035f * envelope
-                val perspective = 0.55f + 0.45f * (1f - kotlin.math.abs(rowFactor - 0.5f) * 2f)
-                val pulse = (0.72f + 0.28f * kotlin.math.sin(phaseShift * 2.0 + column * 0.19 + row * 0.13).toFloat())
-                val colorIndex = ((xFactor * (colors.size - 1)).toInt()).coerceIn(0, colors.lastIndex)
-                val colorMix = (xFactor * (colors.size - 1) - colorIndex).coerceIn(0f, 1f)
-                val color = androidx.compose.ui.graphics.lerp(colors[colorIndex], colors[(colorIndex + 1).coerceAtMost(colors.lastIndex)], colorMix)
-                val alpha = (0.24f + 0.76f * pulse) * edgeFade.coerceAtLeast(0.12f)
-                val radius = (0.65f + 1.35f * pulse) * perspective
+                val xFactor = column / (columns - 1f)
+                val x = w * (0.055f + xFactor * 0.89f)
+                val envelope = spectrum(xFactor)
+                val waveA = kotlin.math.sin(xFactor * 13f - p * 1.25f + depth * 4.2f)
+                val waveB = kotlin.math.cos(xFactor * 23f + p * 0.78f - depth * 5.4f)
+                val crossWave = kotlin.math.sin(depth * 9f + xFactor * 8f - p * 0.55f)
+                val displacement = (waveA * 0.105f + waveB * 0.027f + crossWave * 0.018f) * h * envelope
+                val y = centerY + depthY + displacement
+                val pulse = 0.68f + 0.32f * kotlin.math.sin(p * 1.8f + column * 0.12f + row * 0.19f)
+                val edge = kotlin.math.sin(Math.PI * xFactor).toFloat().coerceAtLeast(0f)
+                val color = colorAt(xFactor)
+                val radius = (0.55f + 0.95f * pulse) * perspective
+                val alpha = (0.20f + 0.55f * edge * pulse) * (0.48f + 0.52f * envelope.coerceAtMost(1f))
                 drawCircle(
-                    color = color.copy(alpha = alpha * 0.22f),
-                    radius = radius * 3.1f,
+                    color = color.copy(alpha = alpha * 0.12f),
+                    radius = radius * 3.0f,
                     center = androidx.compose.ui.geometry.Offset(x, y)
                 )
                 drawCircle(
@@ -1474,15 +1527,27 @@ private fun ParticleAudioVisualizer(
                 )
             }
         }
-        // Bright central energy ribbon creates the depth and luminous ring effect.
-        for (column in 0 until 110) {
-            val xFactor = column / 109f
-            val x = w * (0.02f + xFactor * 0.96f)
-            val wave = kotlin.math.sin(xFactor * 20.0 + phaseShift * 1.7).toFloat()
-            val y = centerY + wave * h * 0.13f * energy
-            val color = if (xFactor < 0.5f) Color(0xFF16BFFF) else Color(0xFFFF35D0)
-            drawCircle(color.copy(alpha = 0.75f), radius = 1.35f, center = androidx.compose.ui.geometry.Offset(x, y))
+
+        // A crisp luminous signal travels through the center of the mesh.
+        val signal = androidx.compose.ui.graphics.Path()
+        for (i in 0..columns) {
+            val xFactor = i / columns.toFloat()
+            val x = w * (0.055f + xFactor * 0.89f)
+            val env = spectrum(xFactor)
+            val y = centerY + kotlin.math.sin(xFactor * 15f - p * 1.45f) * h * 0.12f * env
+            if (i == 0) signal.moveTo(x, y) else signal.lineTo(x, y)
         }
+        drawPath(
+            signal,
+            brush = Brush.horizontalGradient(
+                listOf(Color(0xFF24DFFF), Color(0xFF7864FF), Color(0xFFFF4BD8))
+            ),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = 1.15.dp.toPx(),
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            ),
+            alpha = if (isPlaying) 0.88f else 0.42f
+        )
     }
 }
 
