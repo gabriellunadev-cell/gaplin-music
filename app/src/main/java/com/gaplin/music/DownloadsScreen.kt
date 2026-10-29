@@ -2,6 +2,8 @@ package com.gaplin.music
 
 import android.os.Handler
 import android.os.Looper
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -92,6 +94,21 @@ fun DownloadsScreen(
     var downloaded by remember { mutableStateOf<List<DownloadedMedia>>(emptyList()) }
     val tasks = remember { mutableStateListOf<DownloadUiTask>() }
     val downloadMutex = remember { Mutex() }
+    var cookiesConfigured by remember { mutableStateOf(manager.hasYoutubeCookies()) }
+    var cookieMessage by remember { mutableStateOf<String?>(null) }
+    val cookiesPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val count = manager.importYoutubeCookies(uri)
+                    cookiesConfigured = true
+                    cookieMessage = "$count cookies do YouTube importados com segurança."
+                } catch (error: Exception) {
+                    cookieMessage = error.message ?: "Não foi possível importar os cookies."
+                }
+            }
+        }
+    }
 
     LaunchedEffect(manager) {
         try {
@@ -158,7 +175,7 @@ fun DownloadsScreen(
         val duplicate = tasks.any { task ->
             task.source.url == item.url &&
                 task.audioOnly == audioOnly &&
-                task.status in setOf("Na fila", "Preparando", "Baixando", "Concluído")
+                task.status in setOf("Na fila", "Verificando", "Preparando", "Baixando", "Concluído")
         }
         if (duplicate) {
             downloadMessage = "Este conteúdo já está na fila ou foi baixado nesta sessão."
@@ -186,22 +203,35 @@ fun DownloadsScreen(
             downloadMutex.withLock {
                 val queuedIndex = tasks.indexOfFirst { it.id == taskId }
                 if (queuedIndex >= 0) {
-                    tasks[queuedIndex] = tasks[queuedIndex].copy(status = "Preparando")
+                    tasks[queuedIndex] = tasks[queuedIndex].copy(status = "Verificando")
                 }
                 downloading = true
                 try {
-                    val files = manager.download(item, audioOnly) { progress, eta ->
-                        mainHandler.post {
-                            val index = tasks.indexOfFirst { it.id == taskId }
-                            if (index >= 0) {
-                                tasks[index] = tasks[index].copy(
-                                    progress = progress,
-                                    etaSeconds = eta,
-                                    status = "Baixando"
-                                )
+                    val files = manager.download(
+                        item = item,
+                        audioOnly = audioOnly,
+                        onStage = { stage ->
+                            mainHandler.post {
+                                val index = tasks.indexOfFirst { it.id == taskId }
+                                if (index >= 0) {
+                                    val status = if (stage == "Validando disponibilidade") "Verificando" else "Preparando"
+                                    tasks[index] = tasks[index].copy(status = status)
+                                }
+                            }
+                        },
+                        onProgress = { progress, eta ->
+                            mainHandler.post {
+                                val index = tasks.indexOfFirst { it.id == taskId }
+                                if (index >= 0) {
+                                    tasks[index] = tasks[index].copy(
+                                        progress = progress,
+                                        etaSeconds = eta,
+                                        status = "Baixando"
+                                    )
+                                }
                             }
                         }
-                    }
+                    )
                     downloaded = manager.listDownloaded()
                     val index = tasks.indexOfFirst { it.id == taskId }
                     if (index >= 0) {
@@ -357,6 +387,49 @@ fun DownloadsScreen(
                         )
                     } else {
                         Text("Downloads disponíveis para conteúdos autorizados e sem DRM.", color = DownloadMuted, fontSize = 10.sp)
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp))
+                            .background(Color(0xFF0B1730).copy(alpha = .72f)).padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(
+                                if (cookiesConfigured) "Sessão do YouTube configurada" else "Conteúdo que exige sua conta",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                if (cookiesConfigured)
+                                    "Cookies guardados somente no armazenamento privado do app."
+                                else
+                                    "Opcional: importe seu arquivo Netscape .txt, exportado da sua própria conta.",
+                                color = DownloadMuted,
+                                fontSize = 9.sp
+                            )
+                        }
+                        if (cookiesConfigured) {
+                            IconButton(onClick = {
+                                scope.launch {
+                                    runCatching { manager.clearYoutubeCookies() }
+                                    cookiesConfigured = false
+                                    cookieMessage = "Sessão removida do armazenamento do Gaplin."
+                                }
+                            }) {
+                                Icon(Icons.Default.Refresh, "Remover sessão", tint = DownloadPink)
+                            }
+                        }
+                        OutlinedButton(
+                            onClick = { cookiesPicker.launch(arrayOf("text/*", "application/octet-stream")) },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = DownloadAccent)
+                        ) {
+                            Text(if (cookiesConfigured) "Trocar" else "Importar", fontSize = 10.sp)
+                        }
+                    }
+                    if (cookieMessage != null) {
+                        Text(cookieMessage!!, color = DownloadMuted, fontSize = 10.sp)
                     }
                 }
 
@@ -570,7 +643,7 @@ private fun DownloadDetail(
             }
             OutlinedButton(
                 onClick = onDownloadAudio,
-                enabled = engineReady && !downloading,
+                enabled = engineReady,
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = DownloadAccent)
@@ -618,7 +691,7 @@ private fun DownloadTaskCard(task: DownloadUiTask, onRetry: () -> Unit) {
             }
             Text(task.status, color = if (task.status == "Falhou") DownloadPink else DownloadMuted, fontSize = 10.sp)
         }
-        if (task.status == "Baixando" || task.status == "Preparando") {
+        if (task.status == "Baixando" || task.status == "Preparando" || task.status == "Verificando") {
             LinearProgressIndicator(
                 progress = (task.progress / 100f).coerceIn(0f, 1f),
                 modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(50)),
@@ -627,7 +700,8 @@ private fun DownloadTaskCard(task: DownloadUiTask, onRetry: () -> Unit) {
             )
             val etaText = if (task.etaSeconds > 0) "aprox. " + task.etaSeconds + "s restantes" else "calculando tempo"
             Text(
-                if (task.status == "Preparando") "Preparando o arquivo..."
+                if (task.status == "Verificando") "Verificando se a fonte disponibiliza este conteúdo..."
+                else if (task.status == "Preparando") "Preparando o arquivo..."
                 else task.progress.toInt().toString() + "% • " + etaText,
                 color = DownloadMuted,
                 fontSize = 10.sp
