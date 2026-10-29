@@ -317,15 +317,21 @@ class FileManagerActivity : ComponentActivity() {
             return
         }
 
-        lifecycleScope.launch {
-            val deletedSaf = withContext(Dispatchers.IO) {
-                safFiles.count { FileManagerRepository.deleteSafDocument(this@FileManagerActivity, it.uri) }
-            }
-            if (mediaStoreUris.isEmpty()) {
+        if (mediaStoreUris.isEmpty()) {
+            lifecycleScope.launch {
+                val deletedSaf = withContext(Dispatchers.IO) {
+                    safFiles.count { FileManagerRepository.deleteSafDocument(this@FileManagerActivity, it.uri) }
+                }
                 statusMessage = "$deletedSaf arquivo(s) removido(s) da pasta selecionada."
                 scanFiles()
-            } else {
-                requestMediaStoreDelete(mediaStoreUris) {
+            }
+        } else {
+            // Ask Android to authorize MediaStore deletion before removing any SAF originals.
+            requestMediaStoreDelete(mediaStoreUris) {
+                lifecycleScope.launch {
+                    val deletedSaf = withContext(Dispatchers.IO) {
+                        safFiles.count { FileManagerRepository.deleteSafDocument(this@FileManagerActivity, it.uri) }
+                    }
                     statusMessage = "Exclusão concluída. $deletedSaf arquivo(s) SAF removido(s)."
                     scanFiles()
                 }
