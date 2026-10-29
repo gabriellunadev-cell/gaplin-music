@@ -116,6 +116,14 @@ class YtDlpDownloadManager(context: Context) {
         val request = YtDlpRequest(item.url)
             .setOutputTemplate(outputTemplate)
             .addOption("-f", format)
+            // Prefer YouTube Android client to avoid known SABR/403 failures on default clients.
+            .addOption("--extractor-args", "youtube:player_client=android")
+            .addOption("--retries", "5")
+            .addOption("--fragment-retries", "5")
+            .addOption("--extractor-retries", "3")
+            .addOption("--file-access-retries", "3")
+            .addOption("--retry-sleep", "http:exp=1:20")
+            .addOption("--concurrent-fragments", "1")
             .addOption("--newline")
 
         if (item.kind == RemoteMediaKind.VIDEO) {
