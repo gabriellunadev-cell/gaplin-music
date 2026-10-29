@@ -17,6 +17,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.IntentSenderRequest
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
@@ -98,6 +99,14 @@ class MainActivity : ComponentActivity() {
     private var videoPermission by mutableStateOf(false)
     private var mediaRefreshToken by mutableStateOf(0)
     private var selectedTreeUri by mutableStateOf<Uri?>(null)
+    private var pendingBulkDeleteUris: List<Uri> = emptyList()
+
+    private val bulkDeleteLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) mediaRefreshToken++
+        pendingBulkDeleteUris = emptyList()
+    }
 
     private val folderPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
@@ -156,6 +165,11 @@ class MainActivity : ComponentActivity() {
             var playbackError by remember { mutableStateOf<String?>(null) }
             var scanError by remember { mutableStateOf<String?>(null) }
             var scanInProgress by remember { mutableStateOf(false) }
+            var selectedAudioUris by remember { mutableStateOf<Set<String>>(emptySet()) }
+            var selectedVideoUris by remember { mutableStateOf<Set<String>>(emptySet()) }
+            var musicSelectionMode by remember { mutableStateOf(false) }
+            var videoSelectionMode by remember { mutableStateOf(false) }
+            var showBulkDeleteConfirmation by remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
             val snackbarHostState = remember { SnackbarHostState() }
 
@@ -218,6 +232,18 @@ class MainActivity : ComponentActivity() {
                 player.addListener(listener)
                 onDispose { player.removeListener(listener) }
             }
+
+            fun toggleAudioSelection(track: AudioTrack) {
+                val key = track.uri.toString()
+                selectedAudioUris = if (key in selectedAudioUris) selectedAudioUris - key else selectedAudioUris + key
+            }
+
+            fun toggleVideoSelection(video: VideoEntry) {
+                val key = video.uri.toString()
+                selectedVideoUris = if (key in selectedVideoUris) selectedVideoUris - key else selectedVideoUris + key
+            }
+
+            fun requestBulkDelete() { showBulkDeleteConfirmation = true }
 
             fun persistPlaylists(updated: List<LocalPlaylist>) {
                 playlists = updated
@@ -414,6 +440,24 @@ class MainActivity : ComponentActivity() {
                                     it.title.contains(search, true) || it.artist.contains(search, true) ||
                                         it.album.contains(search, true) || it.folderPath.contains(search, true)
                                 }
+                                if (musicSection == "Músicas") {
+                                    MediaBulkSelectionBar(
+                                        itemLabel = "músicas",
+                                        totalCount = filtered.size,
+                                        selectedCount = selectedAudioUris.size,
+                                        selectionMode = musicSelectionMode,
+                                        allSelected = filtered.isNotEmpty() && filtered.all { it.uri.toString() in selectedAudioUris },
+                                        onToggleMode = {
+                                            musicSelectionMode = !musicSelectionMode
+                                            if (musicSelectionMode) selectedAudioUris = emptySet()
+                                        },
+                                        onSelectAll = {
+                                            val ids = filtered.map { it.uri.toString() }.toSet()
+                                            selectedAudioUris = if (ids.isNotEmpty() && ids.all { it in selectedAudioUris }) selectedAudioUris - ids else selectedAudioUris + ids
+                                        },
+                                        onDelete = ::requestBulkDelete
+                                    )
+                                }
                                 val groupedTracks = when (musicSection) {
                                     "Pastas" -> filtered.groupBy { it.folderPath }
                                     "Artistas" -> filtered.groupBy { it.artist }
@@ -423,7 +467,10 @@ class MainActivity : ComponentActivity() {
                                 when (musicSection) {
                                     "Músicas" -> AudioList(
                                         filtered, currentAudio, favoriteUris,
-                                        { playAudio(it, filtered) }, ::toggleFavorite
+                                        { playAudio(it, filtered) }, ::toggleFavorite,
+                                        selectionMode = musicSelectionMode,
+                                        selectedUris = selectedAudioUris,
+                                        onToggleSelection = ::toggleAudioSelection
                                     )
                                     "Playlists" -> {
                                         val selectedPlaylist = playlists.firstOrNull { it.id == selectedPlaylistId }
@@ -578,10 +625,38 @@ class MainActivity : ComponentActivity() {
                                     it.title.contains(search, true) || it.seriesName.contains(search, true) ||
                                         it.folderName.contains(search, true)
                                 }
+                                MediaBulkSelectionBar(
+                                    itemLabel = "vídeos",
+                                    totalCount = filtered.size,
+                                    selectedCount = selectedVideoUris.size,
+                                    selectionMode = videoSelectionMode,
+                                    allSelected = filtered.isNotEmpty() && filtered.all { it.uri.toString() in selectedVideoUris },
+                                    onToggleMode = {
+                                        videoSelectionMode = !videoSelectionMode
+                                        if (videoSelectionMode) selectedVideoUris = emptySet()
+                                    },
+                                    onSelectAll = {
+                                        val ids = filtered.map { it.uri.toString() }.toSet()
+                                        selectedVideoUris = if (ids.isNotEmpty() && ids.all { it in selectedVideoUris }) selectedVideoUris - ids else selectedVideoUris + ids
+                                    },
+                                    onDelete = ::requestBulkDelete
+                                )
                                 val episodeItems = filtered.filter { it.season != null && it.episode != null }
                                 val movieItems = filtered.filter { it.season == null || it.episode == null }
                                 val grouped = episodeItems.groupBy { it.seriesName }.toSortedMap(String.CASE_INSENSITIVE_ORDER)
-                                if (selectedSeries != null) {
+                                if (videoSelectionMode) {
+                                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 14.dp)) {
+                                        items(filtered, key = { "select-video:${it.uri}" }) { video ->
+                                            VideoRow(
+                                                video,
+                                                onPlay = { playVideo(video) },
+                                                selectionMode = true,
+                                                selected = video.uri.toString() in selectedVideoUris,
+                                                onToggleSelection = { toggleVideoSelection(video) }
+                                            )
+                                        }
+                                    }
+                                } else if (selectedSeries != null) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         IconButton(onClick = { selectedSeries = null }) {
                                             Icon(Icons.Default.ArrowBack, null, tint = VioletSoft)
@@ -663,6 +738,30 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         }
+                        if (showBulkDeleteConfirmation) {
+                            val selectedUris = (selectedAudioUris + selectedVideoUris).mapNotNull { raw ->
+                                runCatching { Uri.parse(raw) }.getOrNull()
+                            }
+                            AlertDialog(
+                                onDismissRequest = { showBulkDeleteConfirmation = false },
+                                title = { Text("Excluir arquivos selecionados?") },
+                                text = { Text("Você selecionou ${selectedUris.size} arquivo(s). O Android poderá solicitar autorização para excluir. Esta ação não pode ser desfeita.") },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        showBulkDeleteConfirmation = false
+                                        selectedAudioUris = emptySet()
+                                        selectedVideoUris = emptySet()
+                                        musicSelectionMode = false
+                                        videoSelectionMode = false
+                                        deleteMediaFiles(selectedUris)
+                                    }) { Text("Excluir") }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showBulkDeleteConfirmation = false }) { Text("Cancelar") }
+                                }
+                            )
+                        }
+
                         if (showPlaylistPicker && trackToAdd != null) {
                             AlertDialog(
                                 onDismissRequest = { showPlaylistPicker = false; trackToAdd = null },
@@ -829,6 +928,33 @@ class MainActivity : ComponentActivity() {
     private fun cancelSleepTimer() {
         sleepTimerJob?.cancel()
         sleepTimerJob = null
+    }
+
+    private fun deleteMediaFiles(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        val mediaStoreUris = uris.filter { it.authority == "media" }
+        val documentUris = uris.filterNot { it.authority == "media" }
+        documentUris.forEach { uri ->
+            runCatching { androidx.documentfile.provider.DocumentFile.fromSingleUri(this, uri)?.delete() }
+        }
+        if (mediaStoreUris.isEmpty()) {
+            mediaRefreshToken++
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val request = MediaStore.createDeleteRequest(contentResolver, mediaStoreUris)
+                bulkDeleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
+            } catch (_: Exception) {
+                scanError = "O Android não conseguiu iniciar a autorização de exclusão. Nenhum item da biblioteca foi removido."
+            }
+        } else {
+            val deleted = mediaStoreUris.count { uri ->
+                runCatching { contentResolver.delete(uri, null, null) > 0 }.getOrDefault(false)
+            }
+            mediaRefreshToken++
+            scanError = "Arquivos excluídos: $deleted. Alguns itens podem exigir autorização individual do Android."
+        }
     }
 
     private fun connectPlaybackController() {
@@ -1138,19 +1264,64 @@ private fun SearchBox(value: String, onChange: (String) -> Unit) {
 }
 
 @Composable
+private fun MediaBulkSelectionBar(
+    itemLabel: String,
+    totalCount: Int,
+    selectedCount: Int,
+    selectionMode: Boolean,
+    allSelected: Boolean,
+    onToggleMode: () -> Unit,
+    onSelectAll: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Row(Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(if (selectionMode) "$selectedCount selecionado(s)" else "$totalCount $itemLabel",
+            color = if (selectionMode && selectedCount > 0) VioletSoft else TextMuted,
+            fontSize = 11.sp, modifier = Modifier.weight(1f))
+        if (selectionMode) {
+            TextButton(onClick = onSelectAll, enabled = totalCount > 0) {
+                Text(if (allSelected) "Desmarcar tudo" else "Selecionar todos", fontSize = 11.sp)
+            }
+            TextButton(onClick = onDelete, enabled = selectedCount > 0) {
+                Icon(Icons.Default.DeleteOutline, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(3.dp))
+                Text("Excluir", fontSize = 11.sp)
+            }
+            TextButton(onClick = onToggleMode) { Text("Concluir", fontSize = 11.sp) }
+        } else {
+            TextButton(onClick = onToggleMode, enabled = totalCount > 0) {
+                Icon(Icons.Default.Checklist, null, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Selecionar", fontSize = 11.sp)
+            }
+        }
+    }
+}
+
+@Composable
 private fun AudioList(
     tracks: List<AudioTrack>,
     current: AudioTrack?,
     favorites: Set<String>,
     onPlay: (AudioTrack) -> Unit,
-    onFavorite: (AudioTrack) -> Unit
+    onFavorite: (AudioTrack) -> Unit,
+    selectionMode: Boolean = false,
+    selectedUris: Set<String> = emptySet(),
+    onToggleSelection: ((AudioTrack) -> Unit)? = null
 ) {
     if (tracks.isEmpty()) {
         EmptyPanel(Icons.Default.MusicOff, "Nenhuma música encontrada", "Confira as permissões e atualize a biblioteca.")
     } else {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(5.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
             items(tracks, key = { it.uri.toString() }) { track ->
-                AudioRow(track, current, track.uri.toString() in favorites, { onPlay(track) }, { onFavorite(track) })
+                AudioRow(
+                    track, current, track.uri.toString() in favorites,
+                    onPlay = { onPlay(track) },
+                    onFavorite = { onFavorite(track) },
+                    selectionMode = selectionMode,
+                    selected = track.uri.toString() in selectedUris,
+                    onToggleSelection = { onToggleSelection?.invoke(track) }
+                )
             }
         }
     }
@@ -1162,12 +1333,15 @@ private fun AudioRow(
     current: AudioTrack?,
     favorite: Boolean,
     onPlay: () -> Unit,
-    onFavorite: (() -> Unit)?
+    onFavorite: (() -> Unit)?,
+    selectionMode: Boolean = false,
+    selected: Boolean = false,
+    onToggleSelection: () -> Unit = {}
 ) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp))
             .background(if (current?.uri == track.uri) SurfaceRaised else Color.Transparent)
-            .clickable(onClick = onPlay).padding(horizontal = 9.dp, vertical = 9.dp),
+            .clickable(onClick = { if (selectionMode) onToggleSelection() else onPlay() }).padding(horizontal = 9.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         TrackArtwork(track, Modifier.size(43.dp).clip(RoundedCornerShape(12.dp)))
@@ -1175,20 +1349,34 @@ private fun AudioRow(
             Text(track.title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(track.artist, color = TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        if (onFavorite != null) {
-            IconButton(onClick = onFavorite) {
-                Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, tint = if (favorite) VioletSoft else TextMuted)
+        if (selectionMode) {
+            Checkbox(
+                checked = selected,
+                onCheckedChange = { onToggleSelection() },
+                colors = CheckboxDefaults.colors(checkedColor = Violet, uncheckedColor = TextMuted)
+            )
+        } else {
+            if (onFavorite != null) {
+                IconButton(onClick = onFavorite) {
+                    Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, tint = if (favorite) VioletSoft else TextMuted)
+                }
             }
+            Icon(Icons.Default.PlayCircleFilled, null, tint = VioletSoft, modifier = Modifier.size(25.dp).padding(end = 3.dp))
         }
-        Icon(Icons.Default.PlayCircleFilled, null, tint = VioletSoft, modifier = Modifier.size(25.dp).padding(end = 3.dp))
     }
 }
 
 @Composable
-private fun VideoRow(video: VideoEntry, onPlay: () -> Unit) {
+private fun VideoRow(
+    video: VideoEntry,
+    onPlay: () -> Unit,
+    selectionMode: Boolean = false,
+    selected: Boolean = false,
+    onToggleSelection: () -> Unit = {}
+) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SurfaceDark)
-            .clickable(onClick = onPlay).padding(10.dp),
+            .clickable(onClick = { if (selectionMode) onToggleSelection() else onPlay() }).padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         VideoArtwork(video, Modifier.size(116.dp, 72.dp).clip(RoundedCornerShape(11.dp)))
@@ -1197,7 +1385,15 @@ private fun VideoRow(video: VideoEntry, onPlay: () -> Unit) {
             Text(video.folderName, color = TextMuted, fontSize = 11.sp, maxLines = 1)
             Text(formatDuration(video.durationMs), color = VioletSoft, fontSize = 10.sp)
         }
-        Icon(Icons.Default.PlayArrow, null, tint = VioletSoft)
+        if (selectionMode) {
+            Checkbox(
+                checked = selected,
+                onCheckedChange = { onToggleSelection() },
+                colors = CheckboxDefaults.colors(checkedColor = Violet, uncheckedColor = TextMuted)
+            )
+        } else {
+            Icon(Icons.Default.PlayArrow, null, tint = VioletSoft)
+        }
     }
 }
 
