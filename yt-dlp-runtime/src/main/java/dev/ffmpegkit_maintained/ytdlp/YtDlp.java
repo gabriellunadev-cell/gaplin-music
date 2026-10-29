@@ -79,6 +79,20 @@ public class YtDlp {
         });
     }
 
+    public static String inspectMedia(String url, String[] options) throws YtDlpException {
+        ensureInitialized();
+        try {
+            return Python.getInstance()
+                    .getModule("ytdlp_runner")
+                    .callAttr("inspect_media", url, options == null ? new String[0] : options)
+                    .toJava(String.class);
+        } catch (PyException e) {
+            throw new YtDlpException(e.getMessage(), e);
+        } catch (Exception e) {
+            throw new YtDlpException(e.getMessage(), e);
+        }
+    }
+
     public static String getVersion() throws YtDlpException {
         ensureInitialized();
         try {
