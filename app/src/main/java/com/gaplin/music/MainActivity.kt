@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -855,10 +856,15 @@ private fun TopBrand(onRefresh: () -> Unit) {
         Modifier.fillMaxWidth().padding(top = 13.dp, bottom = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Image(
+            painter = painterResource(id = R.drawable.ic_gaplin_logo),
+            contentDescription = "Símbolo Gaplin Music",
+            modifier = Modifier.size(54.dp).padding(end = 7.dp)
+        )
         Column(Modifier.weight(1f)) {
             Text("GAPLIN", color = VioletSoft, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
             Text("MUSIC", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
-            Text("Sua central de entretenimento", color = TextMuted, fontSize = 12.sp)
+            Text("Your media universe", color = TextMuted, fontSize = 11.sp)
         }
         IconButton(onClick = onRefresh) {
             Icon(Icons.Default.Refresh, "Atualizar biblioteca", tint = VioletSoft)
