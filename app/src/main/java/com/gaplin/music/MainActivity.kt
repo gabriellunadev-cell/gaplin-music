@@ -457,7 +457,11 @@ class MainActivity : ComponentActivity() {
                                         allSelected = filtered.isNotEmpty() && filtered.all { it.uri.toString() in selectedAudioUris },
                                         onToggleMode = {
                                             musicSelectionMode = !musicSelectionMode
-                                            if (musicSelectionMode) selectedAudioUris = emptySet()
+                                            if (musicSelectionMode) {
+                                                selectedAudioUris = emptySet()
+                                                selectedVideoUris = emptySet()
+                                                videoSelectionMode = false
+                                            }
                                         },
                                         onSelectAll = {
                                             val ids = filtered.map { it.uri.toString() }.toSet()
@@ -641,7 +645,11 @@ class MainActivity : ComponentActivity() {
                                     allSelected = filtered.isNotEmpty() && filtered.all { it.uri.toString() in selectedVideoUris },
                                     onToggleMode = {
                                         videoSelectionMode = !videoSelectionMode
-                                        if (videoSelectionMode) selectedVideoUris = emptySet()
+                                        if (videoSelectionMode) {
+                                            selectedVideoUris = emptySet()
+                                            selectedAudioUris = emptySet()
+                                            musicSelectionMode = false
+                                        }
                                     },
                                     onSelectAll = {
                                         val ids = filtered.map { it.uri.toString() }.toSet()
