@@ -16,6 +16,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -1407,6 +1408,82 @@ private fun TrackArtwork(track: AudioTrack, modifier: Modifier = Modifier) {
     }
 }
 
+
+@Composable
+private fun ParticleAudioVisualizer(
+    isPlaying: Boolean,
+    progress: Float,
+    modifier: Modifier = Modifier
+) {
+    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "audio-particles")
+    val phase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = (Math.PI * 2.0).toFloat(),
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(
+                durationMillis = if (isPlaying) 4200 else 9000,
+                easing = androidx.compose.animation.core.LinearEasing
+            )
+        ),
+        label = "particle-phase"
+    )
+    val energy = if (isPlaying) 1f else 0.16f
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val centerY = h * 0.52f
+        val rows = 27
+        val columns = 64
+        val phaseShift = phase + progress * 5.5f
+        val colors = listOf(
+            Color(0xFF176BFF), Color(0xFF19C8FF),
+            Color(0xFFB52CFF), Color(0xFFFF36C8),
+            Color(0xFFFF8A35)
+        )
+        for (row in 0 until rows) {
+            val rowFactor = row.toFloat() / (rows - 1)
+            for (column in 0 until columns) {
+                val xFactor = column.toFloat() / (columns - 1)
+                val x = w * (0.035f + xFactor * 0.93f)
+                val edgeFade = kotlin.math.sin(Math.PI * xFactor).toFloat().coerceAtLeast(0f)
+                val carrier = kotlin.math.sin(xFactor * 17.0 + phaseShift * 1.35 + rowFactor * 2.4).toFloat()
+                val ripple = kotlin.math.cos(xFactor * 29.0 - phaseShift * 1.8 + rowFactor * 4.0).toFloat()
+                val envelope = (0.24f + 0.76f * edgeFade) * energy
+                val y = centerY +
+                    (rowFactor - 0.5f) * h * 0.64f +
+                    carrier * h * 0.105f * envelope +
+                    ripple * h * 0.035f * envelope
+                val perspective = 0.55f + 0.45f * (1f - kotlin.math.abs(rowFactor - 0.5f) * 2f)
+                val pulse = (0.72f + 0.28f * kotlin.math.sin(phaseShift * 2.0 + column * 0.19 + row * 0.13).toFloat())
+                val colorIndex = ((xFactor * (colors.size - 1)).toInt()).coerceIn(0, colors.lastIndex)
+                val colorMix = (xFactor * (colors.size - 1) - colorIndex).coerceIn(0f, 1f)
+                val color = androidx.compose.ui.graphics.lerp(colors[colorIndex], colors[(colorIndex + 1).coerceAtMost(colors.lastIndex)], colorMix)
+                val alpha = (0.24f + 0.76f * pulse) * edgeFade.coerceAtLeast(0.12f)
+                val radius = (0.65f + 1.35f * pulse) * perspective
+                drawCircle(
+                    color = color.copy(alpha = alpha * 0.22f),
+                    radius = radius * 3.1f,
+                    center = androidx.compose.ui.geometry.Offset(x, y)
+                )
+                drawCircle(
+                    color = color.copy(alpha = alpha),
+                    radius = radius,
+                    center = androidx.compose.ui.geometry.Offset(x, y)
+                )
+            }
+        }
+        // Bright central energy ribbon creates the depth and luminous ring effect.
+        for (column in 0 until 110) {
+            val xFactor = column / 109f
+            val x = w * (0.02f + xFactor * 0.96f)
+            val wave = kotlin.math.sin(xFactor * 20.0 + phaseShift * 1.7).toFloat()
+            val y = centerY + wave * h * 0.13f * energy
+            val color = if (xFactor < 0.5f) Color(0xFF16BFFF) else Color(0xFFFF35D0)
+            drawCircle(color.copy(alpha = 0.75f), radius = 1.35f, center = androidx.compose.ui.geometry.Offset(x, y))
+        }
+    }
+}
+
 @Composable
 private fun NowPlayingDialog(
     player: Player,
@@ -1469,25 +1546,27 @@ private fun NowPlayingDialog(
                     }
                 }
 
-                Spacer(Modifier.height(18.dp))
-                TrackArtwork(
-                    track,
-                    Modifier.fillMaxWidth().weight(1f).aspectRatio(1f).clip(RoundedCornerShape(24.dp))
+                Spacer(Modifier.height(8.dp))
+                ParticleAudioVisualizer(
+                    isPlaying = player.isPlaying,
+                    progress = sliderValue,
+                    modifier = Modifier.fillMaxWidth().weight(1f).heightIn(min = 180.dp, max = 330.dp)
                 )
-                Spacer(Modifier.height(22.dp))
+                Spacer(Modifier.height(10.dp))
 
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(track.title, color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text(track.artist, color = TextMuted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(track.album, color = VioletSoft, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    TrackArtwork(track, Modifier.size(58.dp).clip(RoundedCornerShape(12.dp)))
+                    Column(Modifier.weight(1f).padding(start = 12.dp, end = 6.dp)) {
+                        Text(track.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(track.artist, color = TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(track.album, color = VioletSoft, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     IconButton(onClick = onFavorite) {
-                        Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, tint = if (favorite) Violet else Color.White, modifier = Modifier.size(28.dp))
+                        Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, tint = if (favorite) Violet else Color.White, modifier = Modifier.size(26.dp))
                     }
                 }
 
-                Spacer(Modifier.height(15.dp))
+                Spacer(Modifier.height(7.dp))
                 Slider(
                     value = sliderValue,
                     onValueChange = {
