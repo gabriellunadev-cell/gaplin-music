@@ -63,9 +63,14 @@ jobs:
       - name: Verify build toolchain
         run: |
           java -version
+          python --version
           gradle --version
           test -d "$ANDROID_HOME/platforms/android-36"
           test -d "$ANDROID_HOME/build-tools/36.0.0"
+          grep -q "yt-dlp==2026.10.26" yt-dlp-runtime/build.gradle
+
+      - name: Test downloader option adapter
+        run: python -m unittest discover -s yt-dlp-runtime/src/test/python -p "test_*.py" -v
 
       - name: Run unit tests and build APK
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug
