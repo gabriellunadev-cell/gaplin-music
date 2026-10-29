@@ -46,6 +46,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.MediaMetadata
@@ -82,6 +83,7 @@ class MainActivity : ComponentActivity() {
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var playerReady by mutableStateOf(false)
     private var controllerFailed by mutableStateOf(false)
+    private var sleepTimerJob: Job? = null
     private var audioPermission by mutableStateOf(false)
     private var videoPermission by mutableStateOf(false)
     private var selectedTreeUri by mutableStateOf<Uri?>(null)
@@ -623,6 +625,8 @@ class MainActivity : ComponentActivity() {
                                     favorite = currentAudio!!.uri.toString() in favoriteUris,
                                     onFavorite = { toggleFavorite(currentAudio!!) },
                                     onAddToPlaylist = { trackToAdd = currentAudio; showPlaylistPicker = true },
+                                    onStartTimer = ::startSleepTimer,
+                                    onCancelTimer = ::cancelSleepTimer,
                                     onDismiss = { showMusicPlayer = false }
                                 )
                             }
@@ -756,6 +760,20 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun startSleepTimer(minutes: Int) {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = lifecycleScope.launch {
+            delay(minutes.coerceIn(1, 240) * 60_000L)
+            if (playerReady) player.pause()
+            sleepTimerJob = null
+        }
+    }
+
+    private fun cancelSleepTimer() {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = null
     }
 
     private fun connectPlaybackController() {
@@ -1237,6 +1255,8 @@ private fun NowPlayingDialog(
     favorite: Boolean,
     onFavorite: () -> Unit,
     onAddToPlaylist: () -> Unit,
+    onStartTimer: (Int) -> Unit,
+    onCancelTimer: () -> Unit,
     onDismiss: () -> Unit
 ) {
     var position by remember(track.uri) { mutableStateOf(0L) }
@@ -1246,13 +1266,10 @@ private fun NowPlayingDialog(
     var showQueue by remember { mutableStateOf(false) }
     var showTimer by remember { mutableStateOf(false) }
     var timerMinutes by remember { mutableStateOf("30") }
-    var timerJob by remember { mutableStateOf<Job?>(null) }
     var speed by remember { mutableStateOf(1f) }
     var volume by remember { mutableStateOf(player.volume) }
     var shuffle by remember { mutableStateOf(player.shuffleModeEnabled) }
     var repeatMode by remember { mutableStateOf(player.repeatMode) }
-    val scope = rememberCoroutineScope()
-
     LaunchedEffect(player, track.uri) {
         while (true) {
             if (!scrubbing) {
@@ -1445,18 +1462,13 @@ private fun NowPlayingDialog(
             confirmButton = {
                 TextButton(onClick = {
                     val minutes = timerMinutes.toIntOrNull()?.coerceIn(1, 240) ?: 30
-                    timerJob?.cancel()
-                    timerJob = scope.launch {
-                        delay(minutes * 60_000L)
-                        player.pause()
-                    }
+                    onStartTimer(minutes)
                     showTimer = false
                 }) { Text("Iniciar") }
             },
             dismissButton = {
                 TextButton(onClick = {
-                    timerJob?.cancel()
-                    timerJob = null
+                    onCancelTimer()
                     showTimer = false
                 }) { Text("Cancelar timer") }
             }
