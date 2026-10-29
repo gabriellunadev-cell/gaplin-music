@@ -79,7 +79,7 @@ jobs:
               -DQJS_ENABLE_INSTALL=OFF \
               -DQJS_BUILD_EXAMPLES=OFF \
               -DQJS_BUILD_CLI_STATIC=OFF \
-              -DQJS_BUILD_WERROR=OFF \\
+              -DQJS_BUILD_WERROR=OFF \
               -DCMAKE_EXE_LINKER_FLAGS=-Wl,-z,max-page-size=16384
             "$CMAKE" --build "$BUILD_DIR" --target qjs_exe --parallel 2
 
