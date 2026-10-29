@@ -25,10 +25,7 @@ class AudioSpectrumCapture(
     init {
         if (audioSessionId <= 0) {
             errorMessage = "A sessão de áudio ainda não está disponível."
-            return
-        }
-
-        try {
+        } else try {
             val effect = Visualizer(audioSessionId)
             val range = Visualizer.getCaptureSizeRange()
             val maxSize = range[1].coerceAtMost(1024)
