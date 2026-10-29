@@ -57,6 +57,7 @@ private val DownloadPink = Color(0xFFFF72B5)
 private data class DownloadUiTask(
     val id: String,
     val title: String,
+    val source: RemoteMediaResult,
     val audioOnly: Boolean,
     val progress: Float = 0f,
     val etaSeconds: Long = 0L,
@@ -158,6 +159,7 @@ fun DownloadsScreen(
             DownloadUiTask(
                 id = taskId,
                 title = item.title,
+                source = item,
                 audioOnly = audioOnly,
                 status = "Preparando"
             )
@@ -405,7 +407,7 @@ fun DownloadsScreen(
                         contentPadding = PaddingValues(bottom = 12.dp)
                     ) {
                         items(tasks, key = { it.id }) { task ->
-                            DownloadTaskCard(task)
+                            DownloadTaskCard(task, onRetry = { startDownload(task.source, task.audioOnly) })
                         }
                     }
                 }
@@ -579,7 +581,7 @@ private fun DownloadDetail(
 }
 
 @Composable
-private fun DownloadTaskCard(task: DownloadUiTask) {
+private fun DownloadTaskCard(task: DownloadUiTask, onRetry: () -> Unit) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(DownloadCard).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -611,7 +613,21 @@ private fun DownloadTaskCard(task: DownloadUiTask) {
                 fontSize = 10.sp
             )
         }
-        if (task.error != null) Text(task.error, color = DownloadPink, fontSize = 10.sp)
+        if (task.error != null) {
+            Text(task.error, color = DownloadPink, fontSize = 10.sp)
+            if (task.status == "Falhou") {
+                OutlinedButton(
+                    onClick = onRetry,
+                    modifier = Modifier.align(Alignment.End),
+                    contentPadding = PaddingValues(horizontal = 13.dp, vertical = 4.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = DownloadAccent)
+                ) {
+                    Icon(Icons.Default.Refresh, null, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("Tentar novamente", fontSize = 11.sp)
+                }
+            }
+        }
     }
 }
 
