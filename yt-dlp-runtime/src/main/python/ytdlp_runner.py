@@ -5,8 +5,11 @@ ffmpegkit-maintained. CLI-style options are translated explicitly so no
 unsupported option is silently discarded.
 """
 import json
+import os
 import yt_dlp
 from yt_dlp.version import __version__ as YT_DLP_VERSION
+
+_JS_RUNTIME_PATH = None
 
 _FLAG_MAP = {
     '-f': ('format', 'str'), '--format': ('format', 'str'),
@@ -29,6 +32,16 @@ _FLAG_MAP = {
 }
 
 
+def configure_js_runtime(executable_path):
+    """Pin yt-dlp to the verified Android QuickJS executable."""
+    global _JS_RUNTIME_PATH
+    path = os.path.abspath(str(executable_path))
+    if not os.path.isfile(path) or not os.access(path, os.X_OK):
+        raise RuntimeError("The packaged QuickJS runtime is missing or not executable")
+    _JS_RUNTIME_PATH = path
+    return path
+
+
 def _parse_extractor_args(value):
     """Convert one CLI extractor-args value to yt-dlp's nested API structure."""
     ie_key, separator, raw_args = str(value).partition(':')
@@ -46,6 +59,12 @@ def _parse_extractor_args(value):
 
 def _cli_to_opts(cli_flags):
     opts = {}
+    if _JS_RUNTIME_PATH:
+        # Python API expects a mapping, not the CLI list representation.
+        # Providing only QuickJS disables the unavailable Deno default.
+        opts['js_runtimes'] = {'quickjs': {'path': _JS_RUNTIME_PATH}}
+    else:
+        raise RuntimeError('No supported JavaScript runtime is configured for YouTube extraction')
     flags = list(cli_flags or [])
     i = 0
     while i < len(flags):
