@@ -412,9 +412,13 @@ fun DownloadsScreen(
                         if (cookiesConfigured) {
                             IconButton(onClick = {
                                 scope.launch {
-                                    runCatching { manager.clearYoutubeCookies() }
-                                    cookiesConfigured = false
-                                    cookieMessage = "Sessão removida do armazenamento do Gaplin."
+                                    try {
+                                        manager.clearYoutubeCookies()
+                                        cookiesConfigured = false
+                                        cookieMessage = "Sessão removida do armazenamento do Gaplin."
+                                    } catch (error: Exception) {
+                                        cookieMessage = error.message ?: "Não foi possível remover a sessão."
+                                    }
                                 }
                             }) {
                                 Icon(Icons.Default.Refresh, "Remover sessão", tint = DownloadPink)
