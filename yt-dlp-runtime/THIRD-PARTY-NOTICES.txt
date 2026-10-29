@@ -1,5 +1,24 @@
 ================================================================================
 THIRD-PARTY NOTICES — yt-dlp-android (Free)
+--------------------------------------------------------------------------------
+YT-DLP-EJS
+--------------------------------------------------------------------------------
+Copyright (c) yt-dlp contributors.
+Licensed under the Unlicense.
+Repository: https://github.com/yt-dlp/ejs
+Package version bundled: 0.8.0
+
+--------------------------------------------------------------------------------
+QUICKJS-NG
+--------------------------------------------------------------------------------
+Copyright (c) 2017-2026 Fabrice Bellard
+Copyright (c) 2017-2024 Charlie Gordon
+Copyright (c) 2023-2026 Ben Noordhuis
+Copyright (c) 2023-2026 Saúl Ibarra Corretgé
+Licensed under the MIT License. The full license is available at:
+https://github.com/quickjs-ng/quickjs/blob/v0.17.0/LICENSE
+Runtime version bundled: v0.17.0, compiled for Android arm64-v8a and x86_64.
+
 ================================================================================
 Include this file in your application's "Open Source Licenses" or "About"
 screen, or bundle it as an asset accessible to the user.
