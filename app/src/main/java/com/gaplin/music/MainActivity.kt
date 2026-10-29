@@ -1434,8 +1434,8 @@ private fun ParticleAudioVisualizer(
         val w = size.width
         val h = size.height
         val centerY = h * 0.51f
-        val columns = 92
-        val depthRows = 31
+        val columns = 84
+        val depthRows = 25
         val p = phase + progress * 5.2f
         val palette = listOf(
             Color(0xFF13D8FF),
@@ -1450,7 +1450,7 @@ private fun ParticleAudioVisualizer(
             val b = kotlin.math.sin(x * 13.4f + p * 0.82f + 0.7f)
             val c = kotlin.math.cos(x * 22.0f - p * 1.7f)
             val formant = 0.48f + 0.25f * a + 0.17f * b + 0.10f * c
-            val envelope = kotlin.math.pow(kotlin.math.sin(Math.PI * x).toFloat().coerceAtLeast(0f), 0.58f)
+            val envelope = kotlin.math.sqrt(kotlin.math.sin(Math.PI * x).toFloat().coerceAtLeast(0f))
             return (formant * envelope * motion).coerceAtLeast(0f)
         }
 
@@ -1515,11 +1515,13 @@ private fun ParticleAudioVisualizer(
                 val color = colorAt(xFactor)
                 val radius = (0.55f + 0.95f * pulse) * perspective
                 val alpha = (0.20f + 0.55f * edge * pulse) * (0.48f + 0.52f * envelope.coerceAtMost(1f))
-                drawCircle(
-                    color = color.copy(alpha = alpha * 0.12f),
-                    radius = radius * 3.0f,
-                    center = androidx.compose.ui.geometry.Offset(x, y)
-                )
+                if (row % 2 == 0 && column % 2 == 0) {
+                    drawCircle(
+                        color = color.copy(alpha = alpha * 0.12f),
+                        radius = radius * 2.7f,
+                        center = androidx.compose.ui.geometry.Offset(x, y)
+                    )
+                }
                 drawCircle(
                     color = color.copy(alpha = alpha),
                     radius = radius,
