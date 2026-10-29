@@ -2,10 +2,14 @@ package com.gaplin.music.playback
 
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.analytics.AnalyticsListener
+import com.gaplin.music.AudioEqualizerController
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 
+@OptIn(UnstableApi::class)
 class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
 
@@ -23,6 +27,15 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .build()
 
+        player.addAnalyticsListener(object : AnalyticsListener {
+            override fun onAudioSessionIdChanged(
+                eventTime: AnalyticsListener.EventTime,
+                audioSessionId: Int
+            ) {
+                AudioEqualizerController.attach(applicationContext, audioSessionId)
+            }
+        })
+
         mediaSession = MediaSession.Builder(this, player).build()
     }
 
@@ -35,6 +48,7 @@ class PlaybackService : MediaSessionService() {
             session.release()
         }
         mediaSession = null
+        AudioEqualizerController.release()
         super.onDestroy()
     }
 }
