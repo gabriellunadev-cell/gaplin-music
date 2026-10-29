@@ -23,7 +23,8 @@ class YtDlpRunnerOptionsTest(unittest.TestCase):
         handle, cls.fake_qjs = tempfile.mkstemp(prefix="gaplin-qjs-")
         os.close(handle)
         os.chmod(cls.fake_qjs, 0o700)
-        cls.runner["configure_js_runtime"](cls.fake_qjs)
+        cls.fake_temp_dir = tempfile.mkdtemp(prefix="gaplin-qjs-tmp-")
+        cls.runner["configure_js_runtime"](cls.fake_qjs, cls.fake_temp_dir)
 
     def test_quickjs_runtime_is_configured_as_python_api_mapping(self):
         opts = self.runner["_cli_to_opts"]([])
@@ -34,6 +35,10 @@ class YtDlpRunnerOptionsTest(unittest.TestCase):
 
     def test_engine_version_reports_the_pinned_ejs_package(self):
         self.assertIn("yt-dlp-ejs 0.8.0", self.runner["get_version"]())
+
+    def test_quickjs_temp_directory_is_private_and_configured(self):
+        self.assertEqual(os.environ["TMPDIR"], self.fake_temp_dir)
+        self.assertEqual(self.runner["tempfile"].gettempdir(), self.fake_temp_dir)
 
     def test_retry_and_format_options_are_mapped(self):
         opts = self.runner["_cli_to_opts"]([
