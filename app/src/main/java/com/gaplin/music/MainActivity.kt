@@ -1696,7 +1696,7 @@ private fun ParticleAudioVisualizer(
             val minDimension = minOf(width, height)
             val center = androidx.compose.ui.geometry.Offset(width * 0.5f, height * 0.5f)
             val baseRadius = minDimension * 0.355f
-            val ringWidth = minDimension * 0.255f
+            val ringWidth = minDimension * 0.34f
             val motion = if (isPlaying) 1f else 0.18f
             val p = phase + progress * 1.6f
             val low = bands.take(8).average().toFloat()
@@ -1727,7 +1727,7 @@ private fun ParticleAudioVisualizer(
 
             // Six animated orbital filaments create the luminous 3D sound ring.
             val angularSteps = 168
-            for (layer in 0 until 6) {
+            for (layer in 0 until 5) {
                 val layerPosition = layer / 5f
                 val orbitRadius = baseRadius + (layerPosition - 0.5f) * ringWidth
                 val path = androidx.compose.ui.graphics.Path()
@@ -1749,16 +1749,16 @@ private fun ParticleAudioVisualizer(
                         width = if (layer == 2 || layer == 3) 1.55.dp.toPx() else 0.85.dp.toPx(),
                         cap = androidx.compose.ui.graphics.StrokeCap.Round
                     ),
-                    alpha = if (isPlaying) 0.34f + layer * 0.045f else 0.17f
+                    alpha = if (isPlaying) 0.16f + layer * 0.025f else 0.09f
                 )
             }
 
             // Dense polar particle mesh. Frequency bands control local radius, brightness and pulse.
-            val radialRows = if (width < 520f) 20 else 25
-            val angularCount = if (width < 520f) 112 else 144
+            val radialRows = if (width < 520f) 24 else 30
+            val angularCount = if (width < 520f) 144 else 184
             for (row in 0 until radialRows) {
                 val depth = row / (radialRows - 1f)
-                val perspective = 0.48f + 0.52f * kotlin.math.sin(Math.PI.toFloat() * depth)
+                val perspective = 0.68f + 0.32f * kotlin.math.sin(Math.PI.toFloat() * depth)
                 val depthOffset = (depth - 0.5f) * minDimension * 0.075f
                 for (column in 0 until angularCount) {
                     val anglePosition = column / angularCount.toFloat()
@@ -1773,9 +1773,11 @@ private fun ParticleAudioVisualizer(
                     val waveA = kotlin.math.sin(angle * 5.2f - p * 1.18f + depth * 4.4f)
                     val waveB = kotlin.math.cos(angle * 11.5f + p * 0.74f - depth * 5.1f)
                     val crossWave = kotlin.math.sin(depth * 9.2f + angle * 3.1f - p * 0.56f)
+                    val bassPulse = bassResponse * (0.16f + 0.08f * kotlin.math.sin(p * 2.2f))
+                    val trebleFlicker = trebleResponse * kotlin.math.sin(p * 3.8f + column * 0.31f) * 0.045f
                     val displacement = (
-                        waveA * 0.024f + waveB * 0.012f + crossWave * 0.009f +
-                            localResponse * (0.12f + bassResponse * 0.12f)
+                        waveA * 0.035f + waveB * 0.020f + crossWave * 0.015f +
+                            localResponse * (0.15f + bassPulse) + trebleFlicker
                         ) * minDimension * motion
                     val radius = baseRadius + (depth - 0.5f) * ringWidth + displacement
                     val x = center.x + kotlin.math.cos(angle) * radius
@@ -1784,14 +1786,14 @@ private fun ParticleAudioVisualizer(
                     val pulse = 0.70f + 0.30f * kotlin.math.sin(p * 1.65f + column * 0.095f + row * 0.23f)
                     val frontLight = 0.62f + 0.38f * kotlin.math.cos(angle - 0.35f)
                     val particleColor = colorAt(anglePosition)
-                    val particleRadius = (0.45f + energy * 1.45f + pulse * 0.42f) * perspective
-                    val alpha = ((0.13f + pulse * 0.34f + localResponse * 0.28f) *
-                        frontLight * perspective).coerceIn(0.07f, 0.90f)
+                    val particleRadius = (0.85f + energy * 2.0f + pulse * 0.72f + trebleResponse * 0.55f) * perspective
+                    val alpha = ((0.30f + pulse * 0.34f + localResponse * 0.38f + trebleResponse * 0.10f) *
+                        frontLight * perspective).coerceIn(0.16f, 0.98f)
 
-                    if (energy > 0.16f || localResponse > 0.18f) {
+                    if ((row % 2 == 0 && column % 3 == 0) || energy > 0.34f) {
                         drawCircle(
-                            color = particleColor.copy(alpha = alpha * 0.15f),
-                            radius = particleRadius * (2.8f + energy),
+                            color = particleColor.copy(alpha = alpha * 0.30f),
+                            radius = particleRadius * (2.4f + energy * 1.8f),
                             center = androidx.compose.ui.geometry.Offset(x, y)
                         )
                     }
@@ -1804,17 +1806,17 @@ private fun ParticleAudioVisualizer(
             }
 
             // Small sparks orbit outside the main mesh for depth and motion.
-            for (spark in 0 until 58) {
+            for (spark in 0 until 220) {
                 val angle = spark * 2.39996f + p * 0.10f
-                val orbit = baseRadius + ringWidth * 0.63f +
-                    kotlin.math.sin(p * 0.8f + spark * 1.71f) * minDimension * 0.025f
+                val orbit = baseRadius + ringWidth * (0.58f + (spark % 7) * 0.12f) +
+                    kotlin.math.sin(p * 0.8f + spark * 1.71f) * minDimension * (0.018f + high * 0.035f)
                 val x = center.x + kotlin.math.cos(angle) * orbit
                 val y = center.y + kotlin.math.sin(angle) * orbit * 0.82f
                 val sparkColor = colorAt((spark / 58f + progress * 0.08f) % 1f)
-                val sparkAlpha = (0.18f + level * 0.56f) * if (isPlaying) 1f else 0.35f
+                val sparkAlpha = (0.28f + level * 0.62f + high * 0.22f) * if (isPlaying) 1f else 0.22f
                 drawCircle(
                     color = sparkColor.copy(alpha = sparkAlpha.coerceIn(0f, 0.75f)),
-                    radius = (0.7f + level * 1.7f) * (0.65f + (spark % 4) * 0.12f),
+                    radius = (0.85f + level * 2.2f + high * 1.4f) * (0.65f + (spark % 4) * 0.12f),
                     center = androidx.compose.ui.geometry.Offset(x, y)
                 )
             }
@@ -1838,7 +1840,7 @@ private fun ParticleAudioVisualizer(
         // Keep the real album artwork visible as the visualizer's central AI core.
         Box(
             Modifier
-                .size(170.dp)
+                .size(180.dp)
                 .align(Alignment.Center)
                 .clip(CircleShape)
                 .background(Color(0xFF070D20))
