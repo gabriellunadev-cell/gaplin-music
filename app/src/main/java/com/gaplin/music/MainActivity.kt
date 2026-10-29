@@ -1519,7 +1519,8 @@ private fun ParticleAudioVisualizer(
             val measuredEnergy = spectrum.getOrNull(index)?.coerceIn(0f, 1f) ?: 0f
             val envelope = kotlin.math.sqrt(kotlin.math.sin(Math.PI * x).toFloat().coerceAtLeast(0f))
             val microMotion = 0.94f + 0.06f * kotlin.math.sin(p * 1.35f + x * 11f)
-            return (0.025f + measuredEnergy * 1.15f) * envelope * microMotion * motion
+            val responsiveEnergy = (measuredEnergy * 1.9f).coerceIn(0f, 1f)
+            return (0.08f + responsiveEnergy * 1.05f) * envelope * microMotion * motion
         }
 
         fun colorAt(x: Float): Color {
@@ -1551,14 +1552,14 @@ private fun ParticleAudioVisualizer(
                 val carrier = kotlin.math.sin(xFactor * 12.5f - p * 1.25f + layer * 0.55f)
                 val secondary = kotlin.math.cos(xFactor * 25f + p * 0.72f - layer)
                 val y = centerY + layerOffset +
-                    (carrier * 0.105f + secondary * 0.028f) * h * envelope
+                    (carrier * 0.17f + secondary * 0.052f) * h * envelope
                 if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
             }
             drawPath(
                 path = path,
                 brush = Brush.horizontalGradient(palette),
                 style = androidx.compose.ui.graphics.drawscope.Stroke(
-                    width = if (layer == 1 || layer == 2) 1.5.dp.toPx() else 0.8.dp.toPx()
+                    width = if (layer == 1 || layer == 2) 1.9.dp.toPx() else 1.1.dp.toPx()
                 ),
                 alpha = layerAlpha
             )
@@ -1576,13 +1577,13 @@ private fun ParticleAudioVisualizer(
                 val waveA = kotlin.math.sin(xFactor * 13f - p * 1.25f + depth * 4.2f)
                 val waveB = kotlin.math.cos(xFactor * 23f + p * 0.78f - depth * 5.4f)
                 val crossWave = kotlin.math.sin(depth * 9f + xFactor * 8f - p * 0.55f)
-                val displacement = (waveA * 0.105f + waveB * 0.027f + crossWave * 0.018f) * h * envelope
+                val displacement = (waveA * 0.19f + waveB * 0.058f + crossWave * 0.038f) * h * envelope
                 val y = centerY + depthY + displacement
                 val pulse = 0.68f + 0.32f * kotlin.math.sin(p * 1.8f + column * 0.12f + row * 0.19f)
                 val edge = kotlin.math.sin(Math.PI * xFactor).toFloat().coerceAtLeast(0f)
                 val color = colorAt(xFactor)
                 val radius = (0.55f + 0.95f * pulse) * perspective
-                val alpha = (0.20f + 0.55f * edge * pulse) * (0.48f + 0.52f * envelope.coerceAtMost(1f))
+                val alpha = (0.30f + 0.66f * edge * pulse) * (0.38f + 0.62f * envelope.coerceAtMost(1f))
                 if (row % 2 == 0 && column % 2 == 0) {
                     drawCircle(
                         color = color.copy(alpha = alpha * 0.12f),
@@ -1604,7 +1605,7 @@ private fun ParticleAudioVisualizer(
             val xFactor = i / columns.toFloat()
             val x = w * (0.055f + xFactor * 0.89f)
             val env = amplitudeAt(xFactor)
-            val y = centerY + kotlin.math.sin(xFactor * 15f - p * 1.45f) * h * 0.12f * env
+            val y = centerY + kotlin.math.sin(xFactor * 15f - p * 1.45f) * h * 0.18f * env
             if (i == 0) signal.moveTo(x, y) else signal.lineTo(x, y)
         }
         drawPath(
@@ -1748,13 +1749,17 @@ private fun NowPlayingDialog(
                             Spacer(Modifier.width(7.dp))
                             Text("ATIVAR ESPECTRO REAL", color = Color.White, fontSize = 10.sp, letterSpacing = 1.sp)
                         }
-                    } else if (spectrumCaptureMessage != null && audioSessionId <= 0) {
+                    } else if (spectrumCaptureMessage != null) {
                         Text(
-                            "AGUARDANDO ÁUDIO",
+                            spectrumCaptureMessage!!.uppercase(Locale.getDefault()),
                             color = TextMuted,
                             fontSize = 9.sp,
-                            letterSpacing = 1.5.sp,
-                            modifier = Modifier.padding(bottom = 9.dp)
+                            letterSpacing = 1.1.sp,
+                            maxLines = 2,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xCC111A38))
+                                .padding(horizontal = 10.dp, vertical = 7.dp)
                         )
                     }
                 }
