@@ -6,6 +6,7 @@ unsupported option is silently discarded.
 """
 import json
 import os
+import tempfile
 from importlib.metadata import PackageNotFoundError, version as package_version
 import yt_dlp
 from yt_dlp.version import __version__ as YT_DLP_VERSION
@@ -33,10 +34,11 @@ _FLAG_MAP = {
 }
 
 
-def configure_js_runtime(executable_path):
-    """Pin yt-dlp to the verified Android QuickJS executable."""
+def configure_js_runtime(executable_path, temp_directory):
+    """Pin yt-dlp to the verified Android QuickJS executable and private temp directory."""
     global _JS_RUNTIME_PATH
     path = os.path.abspath(str(executable_path))
+    temp_path = os.path.abspath(str(temp_directory))
     if not os.path.isfile(path) or not os.access(path, os.X_OK):
         raise RuntimeError("The packaged QuickJS runtime is missing or not executable")
     try:
@@ -47,6 +49,11 @@ def configure_js_runtime(executable_path):
         raise RuntimeError(
             "Incompatible yt-dlp-ejs package: expected 0.8.0, found " + ejs_version
         )
+    os.makedirs(temp_path, exist_ok=True)
+    if not os.access(temp_path, os.W_OK):
+        raise RuntimeError("The private QuickJS temporary directory is not writable")
+    os.environ["TMPDIR"] = temp_path
+    tempfile.tempdir = temp_path
     _JS_RUNTIME_PATH = path
     return path
 
