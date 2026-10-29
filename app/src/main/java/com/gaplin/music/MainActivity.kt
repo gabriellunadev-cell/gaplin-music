@@ -144,6 +144,7 @@ class MainActivity : ComponentActivity() {
             var trackToAdd by remember { mutableStateOf<AudioTrack?>(null) }
             var playbackQueue by remember { mutableStateOf<List<AudioTrack>>(emptyList()) }
             var previousVideoOrientation by remember { mutableStateOf(requestedOrientation) }
+            var fullscreenVideoLandscape by remember { mutableStateOf(false) }
             var playbackError by remember { mutableStateOf<String?>(null) }
             var scanError by remember { mutableStateOf<String?>(null) }
             var scanInProgress by remember { mutableStateOf(false) }
@@ -277,14 +278,20 @@ class MainActivity : ComponentActivity() {
             }
 
             fun playVideo(video: VideoEntry) {
-                currentVideo = video
-                currentAudio = null
-                videoMode = true
-                showPlayer = true
                 if (!playerReady) {
                     playbackError = "O mecanismo de reprodução ainda está iniciando."
                     return
                 }
+
+                currentVideo = video
+                currentAudio = null
+                videoMode = true
+                showPlayer = true
+                previousVideoOrientation = requestedOrientation
+                fullscreenVideoLandscape = false
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                showFullscreenVideo = true
+
                 val item = MediaItem.Builder()
                     .setMediaId(video.uri.toString())
                     .setUri(video.uri)
@@ -710,6 +717,7 @@ class MainActivity : ComponentActivity() {
                             Dialog(
                                 onDismissRequest = {
                                     showFullscreenVideo = false
+                                    fullscreenVideoLandscape = false
                                     requestedOrientation = previousVideoOrientation
                                 },
                                 properties = DialogProperties(
@@ -750,15 +758,37 @@ class MainActivity : ComponentActivity() {
                                         modifier = Modifier.fillMaxSize(),
                                         update = { it.player = this@MainActivity.player }
                                     )
-                                    IconButton(
-                                        onClick = {
-                                            showFullscreenVideo = false
-                                            requestedOrientation = previousVideoOrientation
-                                        },
+                                    Row(
                                         modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
-                                            .background(Color.Black.copy(alpha = .42f), RoundedCornerShape(50))
+                                            .clip(RoundedCornerShape(50))
+                                            .background(Color.Black.copy(alpha = .48f)),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Icon(Icons.Default.Close, "Sair da tela cheia", tint = Color.White)
+                                        IconButton(
+                                            onClick = {
+                                                fullscreenVideoLandscape = !fullscreenVideoLandscape
+                                                requestedOrientation = if (fullscreenVideoLandscape) {
+                                                    ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                                                } else {
+                                                    ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                                                }
+                                            }
+                                        ) {
+                                            Icon(
+                                                Icons.Default.ScreenRotation,
+                                                if (fullscreenVideoLandscape) "Voltar para vertical" else "Girar para horizontal",
+                                                tint = Color.White
+                                            )
+                                        }
+                                        IconButton(
+                                            onClick = {
+                                                showFullscreenVideo = false
+                                                fullscreenVideoLandscape = false
+                                                requestedOrientation = previousVideoOrientation
+                                            }
+                                        ) {
+                                            Icon(Icons.Default.Close, "Sair da tela cheia", tint = Color.White)
+                                        }
                                     }
                                 }
                             }
