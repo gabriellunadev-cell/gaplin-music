@@ -4,7 +4,6 @@ import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
-import android.content.ContentResolver
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
@@ -16,9 +15,6 @@ import dev.ffmpegkit_maintained.ytdlp.YtDlpRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.nio.charset.StandardCharsets
 import java.util.Locale
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ExecutionException
@@ -165,8 +161,12 @@ class YtDlpDownloadManager(context: Context) {
             "O arquivo de cookies está incompleto ou não está no formato Netscape."
         }
 
+        // Keep only YouTube-domain cookies; the export may contain sessions
+        // for unrelated sites. Never log or back up the session file.
+        val safeCookieFile = (listOf("# Netscape HTTP Cookie File") + youtubeRows)
+            .joinToString(separator = "\n", postfix = "\n")
         val temporary = File(appContext.noBackupFilesDir, "yt-dlp-youtube-cookies.tmp")
-        temporary.writeText(raw, Charsets.UTF_8)
+        temporary.writeText(safeCookieFile, Charsets.UTF_8)
         if (youtubeCookiesFile.exists() && !youtubeCookiesFile.delete()) {
             temporary.delete()
             throw IllegalStateException("Não foi possível substituir a sessão salva.")
