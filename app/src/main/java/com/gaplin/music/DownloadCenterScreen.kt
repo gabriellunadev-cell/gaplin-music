@@ -56,8 +56,6 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.gaplin.music.download.YtDlpDownloadWorker
-import com.yausername.ffmpeg.FFmpeg
-import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import com.yausername.youtubedl_android.mapper.VideoInfo
 import kotlinx.coroutines.Dispatchers
@@ -113,8 +111,7 @@ fun DownloadCenterScreen(onRefreshLibrary: () -> Unit) {
             message = null
             try {
                 val result = withContext(Dispatchers.IO) {
-                    YoutubeDL.getInstance().init(context.applicationContext)
-                    FFmpeg.getInstance().init(context.applicationContext)
+                    com.gaplin.music.download.YtDlpEngine.initialize(context.applicationContext)
                     val request = YoutubeDLRequest(cleanUrl).addOption("--no-playlist")
                     YoutubeDL.getInstance().getInfo(request)
                 }
@@ -123,8 +120,10 @@ fun DownloadCenterScreen(onRefreshLibrary: () -> Unit) {
                     message = "A fonte não disponibilizou uma lista de formatos para este link."
                 }
             } catch (error: Exception) {
-                message = error.message?.lineSequence()?.firstOrNull()?.take(220)
-                    ?: "Não foi possível consultar este link."
+                message = com.gaplin.music.download.YtDlpEngine.readableError(
+                    error,
+                    "Não foi possível consultar este link."
+                )
             } finally {
                 isInspecting = false
             }
