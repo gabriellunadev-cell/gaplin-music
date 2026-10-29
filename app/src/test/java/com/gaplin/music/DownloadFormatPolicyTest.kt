@@ -7,14 +7,14 @@ import org.junit.Test
 class DownloadFormatPolicyTest {
     @Test
     fun audioSelectionAcceptsAnyAvailableAudioContainer() {
-        assertEquals("bestaudio/best", DownloadFormatPolicy.selector(audioOnly = true))
+        assertEquals("bestaudio", DownloadFormatPolicy.selector(audioOnly = true))
     }
 
     @Test
     fun videoSelectionPrefersMuxedFormatsWithoutRequiringFfmpegMerge() {
         val selector = DownloadFormatPolicy.selector(audioOnly = false)
         assertTrue(selector.startsWith("best[height<=720][vcodec!=none][acodec!=none]"))
-        assertTrue(selector.contains("/best[height<=720]/best"))
+        assertTrue(selector.contains("/best[vcodec!=none][acodec!=none]"))
         assertTrue(selector.none { it == '+' })
     }
 }
