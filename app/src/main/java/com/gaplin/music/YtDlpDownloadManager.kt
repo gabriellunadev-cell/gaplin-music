@@ -311,7 +311,7 @@ class YtDlpDownloadManager(context: Context) {
 
     private fun sanitizeDiagnostic(message: String): String {
         return message
-            .replace(Regex("(?i)(authorization|cookie|token)=\\S+"), "$1=[oculto]")
+            .replace(Regex("(?i)(authorization|cookie|token)=\\S+")) { match -> match.groupValues[1] + "=[oculto]" }
             .replace(Regex("\\s+"), " ")
             .trim()
     }
