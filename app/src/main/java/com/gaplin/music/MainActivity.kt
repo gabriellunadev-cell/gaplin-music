@@ -101,7 +101,6 @@ class MainActivity : ComponentActivity() {
     private var videoPermission by mutableStateOf(false)
     private var spectrumPermissionGranted by mutableStateOf(false)
     private var playbackAudioSessionId by mutableIntStateOf(0)
-    private var mediaControllerExtrasListener: MediaController.Listener? = null
     private var mediaRefreshToken by mutableStateOf(0)
     private var selectedTreeUri by mutableStateOf<Uri?>(null)
 
@@ -880,22 +879,22 @@ class MainActivity : ComponentActivity() {
 
     private fun connectPlaybackController() {
         val token = SessionToken(this, ComponentName(this, com.gaplin.music.playback.PlaybackService::class.java))
-        val future = MediaController.Builder(this, token).buildAsync()
+        val extrasListener = object : MediaController.Listener {
+            override fun onExtrasChanged(controller: MediaController, extras: Bundle) {
+                val sessionId = extras.getInt(PlaybackSessionKeys.AUDIO_SESSION_ID, 0)
+                if (sessionId > 0) {
+                    playbackAudioSessionId = sessionId
+                }
+            }
+        }
+        val future = MediaController.Builder(this, token)
+            .setListener(extrasListener)
+            .buildAsync()
         controllerFuture = future
         future.addListener({
             if (isDestroyed) return@addListener
             try {
                 player = future.get()
-                val extrasListener = object : MediaController.Listener {
-                    override fun onExtrasChanged(controller: MediaController, extras: Bundle) {
-                        val sessionId = extras.getInt(PlaybackSessionKeys.AUDIO_SESSION_ID, 0)
-                        if (sessionId > 0) {
-                            playbackAudioSessionId = sessionId
-                        }
-                    }
-                }
-                mediaControllerExtrasListener = extrasListener
-                player.addListener(extrasListener)
                 playbackAudioSessionId = player.sessionExtras
                     .getInt(PlaybackSessionKeys.AUDIO_SESSION_ID, 0)
                 playerReady = true
@@ -991,10 +990,6 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        if (::player.isInitialized) {
-            mediaControllerExtrasListener?.let { player.removeListener(it) }
-        }
-        mediaControllerExtrasListener = null
         controllerFuture?.let { MediaController.releaseFuture(it) }
         controllerFuture = null
         super.onDestroy()
