@@ -52,8 +52,44 @@ jobs:
           fi
           echo "Usando SDK manager: $SDKMANAGER"
           yes | "$SDKMANAGER" --licenses
-          "$SDKMANAGER" --install "platforms;android-36" "build-tools;36.0.0"
+          "$SDKMANAGER" --install "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
           "$SDKMANAGER" --list_installed
+
+      - name: Build QuickJS-NG for Android ABIs
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+        run: |
+          set -euo pipefail
+          QUICKJS_VERSION="v0.17.0"
+          git clone --depth 1 --branch "$QUICKJS_VERSION" https://github.com/quickjs-ng/quickjs.git "$RUNNER_TEMP/quickjs-ng"
+
+          NDK="$(find "$ANDROID_HOME/ndk" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          CMAKE="$(find "$ANDROID_HOME/cmake" -type f -path '*/bin/cmake' | sort -V | tail -n 1)"
+          READELF="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          test -x "$CMAKE"
+          test -x "$READELF"
+
+          for ABI in arm64-v8a x86_64; do
+            BUILD_DIR="$RUNNER_TEMP/quickjs-build-$ABI"
+            "$CMAKE" -S "$RUNNER_TEMP/quickjs-ng" -B "$BUILD_DIR" \
+              -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+              -DANDROID_ABI="$ABI" \
+              -DANDROID_PLATFORM=android-24 \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DQJS_ENABLE_INSTALL=OFF \
+              -DQJS_BUILD_EXAMPLES=OFF \
+              -DQJS_BUILD_CLI_STATIC=OFF \
+              -DQJS_BUILD_WERROR=OFF
+            "$CMAKE" --build "$BUILD_DIR" --target qjs_exe --parallel 2
+
+            QJS_BIN="$(find "$BUILD_DIR" -type f -name qjs -perm -111 | head -n 1)"
+            test -n "$QJS_BIN"
+            DEST="yt-dlp-runtime/src/main/assets/quickjs/$ABI"
+            mkdir -p "$DEST"
+            install -m 0755 "$QJS_BIN" "$DEST/qjs"
+            "$READELF" -h "$DEST/qjs" | grep -E "Class:.*ELF64|Machine:"
+            echo "QuickJS-NG $QUICKJS_VERSION packaged for $ABI ($(stat -c%s "$DEST/qjs") bytes)"
+          done
 
       - name: Set up Gradle 8.13
         uses: gradle/actions/setup-gradle@v4
@@ -77,9 +113,12 @@ jobs:
 
       - name: Verify generated APK
         run: |
-          test -s app/build/outputs/apk/debug/app-debug.apk
-          sha256sum app/build/outputs/apk/debug/app-debug.apk
-          ls -lh app/build/outputs/apk/debug/app-debug.apk
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          unzip -l "$APK" | grep -q "assets/quickjs/arm64-v8a/qjs"
+          unzip -l "$APK" | grep -q "assets/quickjs/x86_64/qjs"
+          sha256sum "$APK"
+          ls -lh "$APK"
 
       - name: Upload installable debug APK
         uses: actions/upload-artifact@v4
