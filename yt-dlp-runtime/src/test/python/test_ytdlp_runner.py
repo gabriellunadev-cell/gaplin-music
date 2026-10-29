@@ -32,6 +32,9 @@ class YtDlpRunnerOptionsTest(unittest.TestCase):
             {"quickjs": {"path": self.fake_qjs}},
         )
 
+    def test_engine_version_reports_the_pinned_ejs_package(self):
+        self.assertIn("yt-dlp-ejs 0.8.0", self.runner["get_version"]())
+
     def test_retry_and_format_options_are_mapped(self):
         opts = self.runner["_cli_to_opts"]([
             "-f", "bestaudio",
