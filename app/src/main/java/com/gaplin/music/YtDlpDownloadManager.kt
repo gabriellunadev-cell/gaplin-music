@@ -120,12 +120,10 @@ class YtDlpDownloadManager(context: Context) {
                 MediaStore.Files.FileColumns.MEDIA_TYPE
             )
             val relativePath = "${Environment.DIRECTORY_DOWNLOADS}/Gaplin Music/"
-            val selection = "${MediaStore.MediaColumns.RELATIVE_PATH}=? AND ${MediaStore.Files.FileColumns.MEDIA_TYPE} IN (?,?)"
-            val selectionArgs = arrayOf(
-                relativePath,
-                MediaStore.Files.FileColumns.MEDIA_TYPE_AUDIO.toString(),
-                MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString()
-            )
+            // Query every file in the app's Downloads folder. Audio WebM is not
+            // accepted by some Android Audio collections, but is valid in Downloads.
+            val selection = "${MediaStore.MediaColumns.RELATIVE_PATH}=?"
+            val selectionArgs = arrayOf(relativePath)
 
             appContext.contentResolver.query(
                 collection,
@@ -333,6 +331,17 @@ class YtDlpDownloadManager(context: Context) {
                 .orEmpty()
                 .filter { it.isFile && !it.name.endsWith(".part", true) }
                 .sortedBy { it.name }
+                .map { file ->
+                    // Give audio-only WebM the audio-specific .weba extension.
+                    // This keeps it identifiable as audio without transcoding.
+                    if (audioOnly && file.extension.equals("webm", true)) {
+                        val renamed = File(file.parentFile, file.nameWithoutExtension + ".weba")
+                        if (!file.renameTo(renamed)) {
+                            throw IllegalStateException("Não foi possível preparar o arquivo de áudio WebM.")
+                        }
+                        renamed
+                    } else file
+                }
 
             if (completedFiles.isEmpty()) {
                 throw IllegalStateException(
@@ -350,7 +359,7 @@ class YtDlpDownloadManager(context: Context) {
     private fun publish(source: File, audioOnly: Boolean): DownloadedMedia {
         val extension = source.name.substringAfterLast('.', "").lowercase(Locale.ROOT)
         val mime = when {
-            audioOnly && extension == "webm" -> "audio/webm"
+            audioOnly && extension == "weba" -> "audio/webm"
             audioOnly && extension == "mp4" -> "audio/mp4"
             else -> mimeFromName(source.name).let {
                 if (it == "application/octet-stream" && audioOnly) "audio/*" else it
@@ -358,11 +367,9 @@ class YtDlpDownloadManager(context: Context) {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val collection = if (audioOnly) {
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-            } else {
-                MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-            }
+            // Store in Downloads rather than Audio/Video collections so uncommon
+            // but valid containers (notably audio/webm) are accepted by Android.
+            val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
 
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, source.name)
@@ -483,6 +490,7 @@ class YtDlpDownloadManager(context: Context) {
         return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) ?: when (extension) {
             "m4a" -> "audio/mp4"
             "opus" -> "audio/opus"
+            "weba" -> "audio/webm"
             "webm" -> "video/webm"
             else -> "application/octet-stream"
         }
