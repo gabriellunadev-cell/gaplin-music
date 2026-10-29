@@ -64,7 +64,12 @@ class YtDlpDownloadManager(context: Context) {
         }
         quickJsVersion = output.lineSequence().first().take(60)
         verifyQuickJsScriptExecution(executable)
-        YtDlp.configureJsRuntime(executable.absolutePath)
+        val jsTempDirectory = File(appContext.cacheDir, "yt-dlp-js").apply {
+            if (!exists() && !mkdirs()) {
+                throw IllegalStateException("Não foi possível preparar os arquivos temporários do QuickJS.")
+            }
+        }
+        YtDlp.configureJsRuntime(executable.absolutePath, jsTempDirectory.absolutePath)
     }
 
     private fun verifyQuickJsScriptExecution(executable: File) {
