@@ -49,13 +49,13 @@ class YtDlpDownloadManager(context: Context) {
                 MediaStore.Downloads.DISPLAY_NAME,
                 MediaStore.Downloads.MIME_TYPE
             )
-            val relativePath = "\${Environment.DIRECTORY_DOWNLOADS}/Gaplin Music/"
+            val relativePath = "${Environment.DIRECTORY_DOWNLOADS}/Gaplin Music/"
             appContext.contentResolver.query(
                 collection,
                 projection,
-                "\${MediaStore.Downloads.RELATIVE_PATH}=?",
+                "${MediaStore.Downloads.RELATIVE_PATH}=?",
                 arrayOf(relativePath),
-                "\${MediaStore.Downloads.DATE_ADDED} DESC"
+                "${MediaStore.Downloads.DATE_ADDED} DESC"
             )?.use { cursor ->
                 val idIndex = cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID)
                 val nameIndex = cursor.getColumnIndexOrThrow(MediaStore.Downloads.DISPLAY_NAME)
@@ -133,7 +133,7 @@ class YtDlpDownloadManager(context: Context) {
         }
 
         if (!response.isSuccess) {
-            throw IllegalStateException("O yt-dlp não conseguiu concluir este download (código \${response.exitCode}).")
+            throw IllegalStateException("O yt-dlp não conseguiu concluir este download (código ${response.exitCode}).")
         }
 
         val newFiles = tempDirectory.listFiles().orEmpty()
@@ -161,7 +161,7 @@ class YtDlpDownloadManager(context: Context) {
             val values = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, source.name)
                 put(MediaStore.Downloads.MIME_TYPE, mime)
-                put(MediaStore.Downloads.RELATIVE_PATH, "\${Environment.DIRECTORY_DOWNLOADS}/Gaplin Music")
+                put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/Gaplin Music")
                 put(MediaStore.Downloads.IS_PENDING, 1)
             }
             val resolver = appContext.contentResolver
