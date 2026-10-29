@@ -2,6 +2,7 @@ package com.gaplin.music
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.content.ComponentName
@@ -97,7 +98,8 @@ class MainActivity : ComponentActivity() {
             try {
                 contentResolver.takePersistableUriPermission(
                     uri,
-                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 )
                 selectedTreeUri = uri
                 getSharedPreferences("gaplin_music", MODE_PRIVATE).edit()
@@ -507,7 +509,13 @@ class MainActivity : ComponentActivity() {
                                 }
                                 if (selectedTreeUri != null) {
                                     TextButton(onClick = {
-                                        try { contentResolver.releasePersistableUriPermission(selectedTreeUri!!, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: SecurityException) { }
+                                        try {
+                                            contentResolver.releasePersistableUriPermission(
+                                                selectedTreeUri!!,
+                                                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                                    android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                                            )
+                                        } catch (_: SecurityException) { }
                                         selectedTreeUri = null
                                         getSharedPreferences("gaplin_music", MODE_PRIVATE).edit().remove("media_tree_uri").apply()
                                         scanLibrary()
@@ -552,7 +560,10 @@ class MainActivity : ComponentActivity() {
                             AppTab.MORE -> MoreScreen(
                                 onHome = { activeTab = AppTab.HOME },
                                 onFolders = { activeTab = AppTab.FILES },
-                                onFavorites = { activeTab = AppTab.FAVORITES }
+                                onFavorites = { activeTab = AppTab.FAVORITES },
+                                onManager = {
+                                    startActivity(Intent(this@MainActivity, FileManagerActivity::class.java))
+                                }
                             )
                             AppTab.VIDEOS -> {
                                 ScreenHeading("Filmes e séries", "${catalog.videos.size} vídeos encontrados")
@@ -945,13 +956,20 @@ private fun TopBrand(onRefresh: () -> Unit) {
 private fun MoreScreen(
     onHome: () -> Unit,
     onFolders: () -> Unit,
-    onFavorites: () -> Unit
+    onFavorites: () -> Unit,
+    onManager: () -> Unit
 ) {
     Column(Modifier.fillMaxSize().padding(vertical = 10.dp)) {
         ScreenHeading("Mais do Gaplin", "Acesse suas ferramentas e coleções")
         MoreOptionCard("Painel inicial", "Resumo da sua biblioteca", Icons.Default.Home, onHome)
         MoreOptionCard("Explorador de pastas", "Áudio e vídeo organizados por diretório", Icons.Default.FolderOpen, onFolders)
         MoreOptionCard("Favoritos", "Suas músicas salvas", Icons.Default.Favorite, onFavorites)
+        MoreOptionCard(
+            "Gerenciador inteligente",
+            "Selecionar, mover, excluir e encontrar arquivos duplicados",
+            Icons.Default.FolderManaged,
+            onManager
+        )
         Spacer(Modifier.height(20.dp))
         Text("GAPLIN MUSIC", color = VioletSoft, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
         Text("Sua mídia. Seu espaço. Sua experiência.", color = TextMuted, fontSize = 12.sp)
