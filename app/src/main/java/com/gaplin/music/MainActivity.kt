@@ -99,13 +99,21 @@ class MainActivity : ComponentActivity() {
     private var videoPermission by mutableStateOf(false)
     private var mediaRefreshToken by mutableStateOf(0)
     private var selectedTreeUri by mutableStateOf<Uri?>(null)
-    private var pendingBulkDeleteUris: List<Uri> = emptyList()
+    private var pendingBulkDocumentUris: List<Uri> = emptyList()
+    private var bulkDeleteSuccessCallback: (() -> Unit)? = null
 
     private val bulkDeleteLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
-        if (result.resultCode == RESULT_OK) mediaRefreshToken++
-        pendingBulkDeleteUris = emptyList()
+        if (result.resultCode == RESULT_OK) {
+            pendingBulkDocumentUris.forEach { uri ->
+                runCatching { androidx.documentfile.provider.DocumentFile.fromSingleUri(this, uri)?.delete() }
+            }
+            bulkDeleteSuccessCallback?.invoke()
+            mediaRefreshToken++
+        }
+        pendingBulkDocumentUris = emptyList()
+        bulkDeleteSuccessCallback = null
     }
 
     private val folderPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -749,11 +757,12 @@ class MainActivity : ComponentActivity() {
                                 confirmButton = {
                                     TextButton(onClick = {
                                         showBulkDeleteConfirmation = false
-                                        selectedAudioUris = emptySet()
-                                        selectedVideoUris = emptySet()
-                                        musicSelectionMode = false
-                                        videoSelectionMode = false
-                                        deleteMediaFiles(selectedUris)
+                                        deleteMediaFiles(selectedUris) {
+                                            selectedAudioUris = emptySet()
+                                            selectedVideoUris = emptySet()
+                                            musicSelectionMode = false
+                                            videoSelectionMode = false
+                                        }
                                     }) { Text("Excluir") }
                                 },
                                 dismissButton = {
@@ -930,30 +939,41 @@ class MainActivity : ComponentActivity() {
         sleepTimerJob = null
     }
 
-    private fun deleteMediaFiles(uris: List<Uri>) {
+    private fun deleteMediaFiles(uris: List<Uri>, onSuccess: () -> Unit) {
         if (uris.isEmpty()) return
         val mediaStoreUris = uris.filter { it.authority == "media" }
         val documentUris = uris.filterNot { it.authority == "media" }
-        documentUris.forEach { uri ->
-            runCatching { androidx.documentfile.provider.DocumentFile.fromSingleUri(this, uri)?.delete() }
-        }
+
         if (mediaStoreUris.isEmpty()) {
+            documentUris.forEach { uri ->
+                runCatching { androidx.documentfile.provider.DocumentFile.fromSingleUri(this, uri)?.delete() }
+            }
             mediaRefreshToken++
+            onSuccess()
             return
         }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
                 val request = MediaStore.createDeleteRequest(contentResolver, mediaStoreUris)
+                pendingBulkDocumentUris = documentUris
+                bulkDeleteSuccessCallback = onSuccess
                 bulkDeleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
             } catch (_: Exception) {
-                scanError = "O Android não conseguiu iniciar a autorização de exclusão. Nenhum item da biblioteca foi removido."
+                pendingBulkDocumentUris = emptyList()
+                bulkDeleteSuccessCallback = null
+                scanError = "O Android não conseguiu iniciar a autorização de exclusão. Nenhum item foi removido."
             }
         } else {
-            val deleted = mediaStoreUris.count { uri ->
+            val deletedMedia = mediaStoreUris.count { uri ->
                 runCatching { contentResolver.delete(uri, null, null) > 0 }.getOrDefault(false)
             }
+            documentUris.forEach { uri ->
+                runCatching { androidx.documentfile.provider.DocumentFile.fromSingleUri(this, uri)?.delete() }
+            }
             mediaRefreshToken++
-            scanError = "Arquivos excluídos: $deleted. Alguns itens podem exigir autorização individual do Android."
+            onSuccess()
+            scanError = "Arquivos removidos: $deletedMedia. Alguns itens podem exigir autorização individual do Android."
         }
     }
 
