@@ -29,20 +29,18 @@ _FLAG_MAP = {
 
 
 def _parse_extractor_args(value):
-    """Convert CLI syntax to yt-dlp's YoutubeDL extractor_args structure."""
-    result = {}
-    for group in str(value).split(';'):
-        ie_key, separator, raw_args = group.partition(':')
-        if not separator or not ie_key.strip():
-            raise ValueError('Invalid --extractor-args value')
-        options = result.setdefault(ie_key.strip().lower(), {})
-        for token in raw_args.split(';') if raw_args else []:
-            key, has_value, raw_value = token.partition('=')
-            key = key.strip().replace('-', '_')
-            if not key:
-                continue
-            options[key] = [v for v in raw_value.split(',') if v] if has_value else []
-    return result
+    """Convert one CLI extractor-args value to yt-dlp's nested API structure."""
+    ie_key, separator, raw_args = str(value).partition(':')
+    if not separator or not ie_key.strip():
+        raise ValueError('Invalid --extractor-args value')
+    options = {}
+    for token in raw_args.split(';') if raw_args else []:
+        key, has_value, raw_value = token.partition('=')
+        key = key.strip().replace('-', '_')
+        if not key:
+            continue
+        options[key] = [v for v in raw_value.split(',') if v] if has_value else []
+    return {ie_key.strip().lower(): options}
 
 
 def _cli_to_opts(cli_flags):
