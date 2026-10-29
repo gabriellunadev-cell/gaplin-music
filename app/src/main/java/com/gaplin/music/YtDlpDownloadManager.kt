@@ -148,8 +148,13 @@ class YtDlpDownloadManager(context: Context) {
     }
 
     private fun publish(source: File, audioOnly: Boolean): DownloadedMedia {
-        val mime = mimeFromName(source.name).let {
-            if (it == "application/octet-stream" && audioOnly) "audio/*" else it
+        val extension = source.name.substringAfterLast('.', "").lowercase(Locale.ROOT)
+        val mime = when {
+            audioOnly && extension == "webm" -> "audio/webm"
+            audioOnly && extension == "mp4" -> "audio/mp4"
+            else -> mimeFromName(source.name).let {
+                if (it == "application/octet-stream" && audioOnly) "audio/*" else it
+            }
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
