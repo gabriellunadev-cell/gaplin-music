@@ -63,7 +63,27 @@ class YtDlpDownloadManager(context: Context) {
             throw IllegalStateException("O runtime QuickJS não conseguiu iniciar neste aparelho: ${output.take(220)}")
         }
         quickJsVersion = output.lineSequence().first().take(60)
+        verifyQuickJsScriptExecution(executable)
         YtDlp.configureJsRuntime(executable.absolutePath)
+    }
+
+    private fun verifyQuickJsScriptExecution(executable: File) {
+        val script = File(appContext.noBackupFilesDir, "quickjs-self-test.js")
+        try {
+            script.writeText("console.log('GAPLIN_QJS_OK');", Charsets.UTF_8)
+            val process = ProcessBuilder(executable.absolutePath, "--script", script.absolutePath)
+                .redirectErrorStream(true)
+                .start()
+            val exitCode = process.waitFor()
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            if (exitCode != 0 || "GAPLIN_QJS_OK" !in output) {
+                throw IllegalStateException(
+                    "O QuickJS foi iniciado, mas falhou ao executar JavaScript no Android: ${output.take(220)}"
+                )
+            }
+        } finally {
+            script.delete()
+        }
     }
 
     private fun installQuickJsRuntime(): File {
