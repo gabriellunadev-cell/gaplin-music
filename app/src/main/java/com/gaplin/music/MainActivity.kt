@@ -1856,7 +1856,6 @@ private fun NowPlayingDialog(
                 }
 
                 Spacer(Modifier.height(7.dp))
-                Spacer(Modifier.height(7.dp))
                 Slider(
                     value = sliderValue,
                     onValueChange = {
