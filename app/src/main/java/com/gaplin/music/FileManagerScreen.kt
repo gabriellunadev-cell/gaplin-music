@@ -41,7 +41,8 @@ fun FileManagerScreen(
     onDelete: () -> Unit,
     onMove: () -> Unit,
     onScanDuplicates: () -> Unit,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    onConnectFolder: () -> Unit
 ) {
     var search by remember { mutableStateOf("") }
     val filteredFiles = files.filter { file ->
@@ -61,6 +62,9 @@ fun FileManagerScreen(
             Column(Modifier.weight(1f)) {
                 Text("Gerenciador inteligente", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Text("${files.size} itens indexados · Música, vídeo e fotos", color = ManagerMuted, fontSize = 11.sp)
+            }
+            IconButton(onClick = onConnectFolder) {
+                Icon(Icons.Default.FolderShared, "Conectar pasta com permissão de edição", tint = ManagerAccent)
             }
             IconButton(onClick = onRefresh) {
                 Icon(Icons.Default.Refresh, "Atualizar arquivos", tint = ManagerAccent)
