@@ -79,6 +79,18 @@ public class YtDlp {
         });
     }
 
+    public static String getVersion() throws YtDlpException {
+        ensureInitialized();
+        try {
+            return Python.getInstance()
+                    .getModule("ytdlp_runner")
+                    .callAttr("get_version")
+                    .toJava(String.class);
+        } catch (Exception e) {
+            throw new YtDlpException("Failed to read embedded yt-dlp version", e);
+        }
+    }
+
     public static void updateYtDlp(Context context, UpdateCallback callback) {
         executor.execute(() -> {
             if (callback != null) {
