@@ -2,7 +2,7 @@ name: Android Debug APK
 
 on:
   push:
-    branches: [main, refactor/stability-and-player-ui, feature/file-manager-smart-duplicates]
+    branches: [main, refactor/stability-and-player-ui, feature/file-manager-smart-duplicates, feature/intelligent-3d-audio-visualizer]
   workflow_dispatch:
 
 permissions:
