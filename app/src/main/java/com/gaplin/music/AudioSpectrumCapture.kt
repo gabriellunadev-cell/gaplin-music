@@ -12,7 +12,7 @@ class AudioSpectrumCapture(
 ) : AutoCloseable {
     companion object {
         const val BAND_COUNT = 64
-        private const val CAPTURE_RATE_MICROS = 50_000
+        private const val TARGET_CAPTURE_RATE_MILLIHZ = 20_000
     }
 
     private var visualizer: Visualizer? = null
@@ -32,7 +32,10 @@ class AudioSpectrumCapture(
             val captureSize = Integer.highestOneBit(maxSize).coerceAtLeast(range[0])
             effect.captureSize = captureSize
             effect.setScalingMode(Visualizer.SCALING_MODE_NORMALIZED)
-            effect.setDataCaptureListener(
+            val captureRateMilliHz = Visualizer.getMaxCaptureRate()
+                .coerceAtMost(TARGET_CAPTURE_RATE_MILLIHZ)
+                .coerceAtLeast(1)
+            val listenerStatus = effect.setDataCaptureListener(
                 object : Visualizer.OnDataCaptureListener {
                     override fun onWaveFormDataCapture(
                         visualizer: Visualizer?,
@@ -49,10 +52,14 @@ class AudioSpectrumCapture(
                         onSpectrum(extractBands(fft))
                     }
                 },
-                CAPTURE_RATE_MICROS,
+                captureRateMilliHz,
                 false,
                 true
             )
+            if (listenerStatus != 0) {
+                effect.release()
+                throw IllegalStateException("Visualizer rejeitou a taxa FFT (status=$listenerStatus, rate=$captureRateMilliHz mHz).")
+            }
             effect.enabled = true
             visualizer = effect
             isAvailable = true
