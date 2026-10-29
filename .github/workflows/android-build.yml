@@ -85,11 +85,11 @@ jobs:
 
             QJS_BIN="$(find "$BUILD_DIR" -type f -name qjs -perm -111 | head -n 1)"
             test -n "$QJS_BIN"
-            DEST="yt-dlp-runtime/src/main/assets/quickjs/$ABI"
+            DEST="yt-dlp-runtime/src/main/jniLibs/$ABI"
             mkdir -p "$DEST"
-            install -m 0755 "$QJS_BIN" "$DEST/qjs"
-            "$READELF" -h "$DEST/qjs" | grep -E "Class:.*ELF64|Machine:"
-            echo "QuickJS-NG $QUICKJS_VERSION packaged for $ABI ($(stat -c%s "$DEST/qjs") bytes)"
+            install -m 0755 "$QJS_BIN" "$DEST/libqjs.so"
+            "$READELF" -h "$DEST/libqjs.so" | grep -E "Class:.*ELF64|Machine:"
+            echo "QuickJS-NG $QUICKJS_VERSION packaged in nativeLibraryDir for $ABI ($(stat -c%s "$DEST/libqjs.so") bytes)"
           done
 
       - name: Set up Gradle 8.13
@@ -131,8 +131,8 @@ jobs:
         run: |
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          unzip -l "$APK" | grep -q "assets/quickjs/arm64-v8a/qjs"
-          unzip -l "$APK" | grep -q "assets/quickjs/x86_64/qjs"
+          unzip -l "$APK" | grep -q "lib/arm64-v8a/libqjs.so"
+          unzip -l "$APK" | grep -q "lib/x86_64/libqjs.so"
           sha256sum "$APK"
           ls -lh "$APK"
 
