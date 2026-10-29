@@ -457,7 +457,8 @@ class MainActivity : ComponentActivity() {
                                 when (musicSection) {
                                     "Músicas" -> AudioList(
                                         filtered, currentAudio, favoriteUris,
-                                        { playAudio(it, filtered) }, ::toggleFavorite
+                                        { playAudio(it, filtered) }, ::toggleFavorite,
+                                        onRequestPermission = { requestMissingPermissions() }
                                     )
                                     "Playlists" -> {
                                         val selectedPlaylist = playlists.firstOrNull { it.id == selectedPlaylistId }
@@ -1231,10 +1232,25 @@ private fun AudioList(
     current: AudioTrack?,
     favorites: Set<String>,
     onPlay: (AudioTrack) -> Unit,
-    onFavorite: (AudioTrack) -> Unit
+    onFavorite: (AudioTrack) -> Unit,
+    onRequestPermission: (() -> Unit)? = null
 ) {
     if (tracks.isEmpty()) {
-        EmptyPanel(Icons.Default.MusicOff, "Nenhuma música encontrada", "Confira as permissões e atualize a biblioteca.")
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            EmptyPanel(
+                Icons.Default.MusicOff,
+                "Nenhuma música encontrada",
+                if (onRequestPermission != null) "Permita o acesso aos arquivos de áudio e atualize a biblioteca."
+                else "Adicione músicas à biblioteca ou selecione uma pasta para pesquisar."
+            )
+            if (onRequestPermission != null) {
+                FilledTonalButton(onClick = onRequestPermission) {
+                    Icon(Icons.Default.FolderOpen, null)
+                    Spacer(Modifier.width(7.dp))
+                    Text("Permitir acesso às músicas")
+                }
+            }
+        }
     } else {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(5.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
             items(tracks, key = { it.uri.toString() }) { track ->
