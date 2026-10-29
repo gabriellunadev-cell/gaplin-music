@@ -1,5 +1,12 @@
 package com.gaplin.music
 
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
+import android.os.Build
+import android.util.Size
+import android.graphics.BitmapFactory
+import android.os.CancellationSignal
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -12,6 +19,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -21,6 +30,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private val ManagerSurface = Color(0xFF0D1B3A)
 private val ManagerRaised = Color(0xFF17284D)
@@ -259,6 +270,67 @@ fun FileManagerScreen(
     }
 }
 
+
+@Composable
+private fun ManagedFileThumbnail(file: ManagedMediaFile, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val bitmap by produceState<Bitmap?>(initialValue = null, file.stableId) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    context.contentResolver.loadThumbnail(file.uri, Size(256, 256), CancellationSignal())
+                } else {
+                    when (file.kind) {
+                        ManagedMediaKind.VIDEO, ManagedMediaKind.AUDIO -> {
+                            val retriever = MediaMetadataRetriever()
+                            try {
+                                retriever.setDataSource(context, file.uri)
+                                if (file.kind == ManagedMediaKind.AUDIO) {
+                                    retriever.embeddedPicture?.let { bytes ->
+                                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                    }
+                                } else {
+                                    retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                                }
+                            } finally {
+                                retriever.release()
+                            }
+                        }
+                        ManagedMediaKind.IMAGE -> context.contentResolver.openInputStream(file.uri)?.use {
+                            BitmapFactory.decodeStream(it)
+                        }
+                    }
+                }
+            }.getOrNull()
+        }
+    }
+
+    Box(
+        modifier.background(Brush.linearGradient(listOf(Color(0xFF31205C), Color(0xFF16375C)))),
+        contentAlignment = Alignment.Center
+    ) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap!!.asImageBitmap(),
+                contentDescription = "Prévia do arquivo",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+            )
+        } else {
+            Icon(
+                when (file.kind) {
+                    ManagedMediaKind.AUDIO -> Icons.Default.MusicNote
+                    ManagedMediaKind.VIDEO -> Icons.Default.Movie
+                    ManagedMediaKind.IMAGE -> Icons.Default.Image
+                },
+                contentDescription = null,
+                tint = ManagerAccent,
+                modifier = Modifier.size(25.dp)
+            )
+        }
+    }
+}
+
 @Composable
 private fun ManagedFileRow(
     file: ManagedMediaFile,
@@ -271,22 +343,7 @@ private fun ManagedFileRow(
             .clickable(onClick = onToggle).padding(horizontal = 9.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            Modifier.size(42.dp).clip(RoundedCornerShape(11.dp))
-                .background(Brush.linearGradient(listOf(Color(0xFF31205C), Color(0xFF16375C)))),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                when (file.kind) {
-                    ManagedMediaKind.AUDIO -> Icons.Default.MusicNote
-                    ManagedMediaKind.VIDEO -> Icons.Default.Movie
-                    ManagedMediaKind.IMAGE -> Icons.Default.Image
-                },
-                contentDescription = null,
-                tint = ManagerAccent,
-                modifier = Modifier.size(22.dp)
-            )
-        }
+        ManagedFileThumbnail(file, Modifier.size(58.dp).clip(RoundedCornerShape(11.dp)))
         Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
             Text(file.name, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(file.folderPath, color = ManagerMuted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
