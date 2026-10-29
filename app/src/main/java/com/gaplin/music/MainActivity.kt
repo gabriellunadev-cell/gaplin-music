@@ -816,13 +816,11 @@ class MainActivity : ComponentActivity() {
     private fun requestMissingPermissions() {
         val permissions = if (Build.VERSION.SDK_INT >= 34) {
             buildList {
-                if (!audioPermission && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                if (!audioPermission) {
                     add(Manifest.permission.READ_MEDIA_AUDIO)
                 }
-                if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_MEDIA_VIDEO) != PackageManager.PERMISSION_GRANTED) {
+                if (!videoPermission) {
                     add(Manifest.permission.READ_MEDIA_VIDEO)
-                }
-                if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) != PackageManager.PERMISSION_GRANTED) {
                     add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
                 }
             }.toTypedArray()
