@@ -8,7 +8,8 @@ android {
     compileSdk = 36
     defaultConfig {
         applicationId = "com.gaplin.music"
-        minSdk = 23
+        minSdk = 24
+        ndk { abiFilters += setOf("arm64-v8a", "x86_64") }
         targetSdk = 35
         versionCode = 14
         versionName = "1.3.7"
@@ -34,6 +35,8 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.8.0")
     implementation("androidx.media3:media3-ui:1.8.0")
     implementation("androidx.media3:media3-session:1.8.0")
+    implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation("dev.ffmpegkit-maintained:yt-dlp-android:2.0.2")
     implementation("androidx.documentfile:documentfile:1.0.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
