@@ -17,9 +17,10 @@ import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import com.yausername.youtubedl_android.FFmpeg
+import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -129,6 +130,9 @@ class YtDlpDownloadWorker(
             setProgress(workDataOf(KEY_PROGRESS to 100))
             updateNotification(title, 100, completed = true)
             Result.success(output)
+        } catch (cancelled: CancellationException) {
+            YoutubeDL.getInstance().destroyProcessById(id.toString())
+            throw cancelled
         } catch (cancelled: InterruptedException) {
             YoutubeDL.getInstance().destroyProcessById(id.toString())
             Result.failure(workDataOf(KEY_ERROR to "Download cancelado."))
@@ -143,11 +147,6 @@ class YtDlpDownloadWorker(
                 ?: "Não foi possível concluir o download."
             Result.failure(workDataOf(KEY_ERROR to message))
         }
-    }
-
-    override fun onStopped() {
-        runCatching { YoutubeDL.getInstance().destroyProcessById(id.toString()) }
-        super.onStopped()
     }
 
     private fun isHttpUrl(value: String): Boolean = runCatching {
