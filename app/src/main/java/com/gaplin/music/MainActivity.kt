@@ -1230,8 +1230,8 @@ private fun SeriesCard(name: String, episodes: List<VideoEntry>, onClick: () -> 
         Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(SurfaceDark).clickable(onClick = onClick).padding(13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(SurfaceRaised), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.Tv, null, tint = VioletSoft)
+        episodes.firstOrNull()?.let { firstEpisode ->
+            VideoArtwork(firstEpisode, Modifier.size(76.dp, 58.dp).clip(RoundedCornerShape(11.dp)))
         }
         Column(Modifier.weight(1f).padding(horizontal = 11.dp)) {
             Text(name, color = Color.White, fontWeight = FontWeight.SemiBold)
