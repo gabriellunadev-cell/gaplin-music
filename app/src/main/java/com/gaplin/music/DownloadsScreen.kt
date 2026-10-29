@@ -262,7 +262,7 @@ fun DownloadsScreen(
     }
 
     Column(
-        Modifier.fillMaxSize().padding(top = 4.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 4.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -455,12 +455,11 @@ fun DownloadsScreen(
                         "Mais" -> results.filter { it.kind != RemoteMediaKind.VIDEO }
                         else -> results
                     }
-                    LazyColumn(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = PaddingValues(bottom = 14.dp)
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(visibleResults, key = { it.kind.toString() + ":" + it.id }) { item ->
+                        visibleResults.forEach { item ->
                             DownloadResultCard(
                                 item = item,
                                 onOpen = { selectedResult = item },
@@ -481,13 +480,11 @@ fun DownloadsScreen(
                         icon = Icons.Default.Info
                     )
                 } else {
-                    Spacer(Modifier.weight(1f))
                     EmptyDownloadState(
                         title = "Sua próxima mídia começa aqui",
                         message = "Digite uma música, artista ou vídeo para encontrar resultados no YouTube.",
                         icon = Icons.Default.Search
                     )
-                    Spacer(Modifier.weight(1f))
                 }
             }
             selectedSection == "Fila" -> {
@@ -498,12 +495,11 @@ fun DownloadsScreen(
                         icon = Icons.Default.CloudDownload
                     )
                 } else {
-                    LazyColumn(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(9.dp),
-                        contentPadding = PaddingValues(bottom = 12.dp)
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(9.dp)
                     ) {
-                        items(tasks, key = { it.id }) { task ->
+                        tasks.forEach { task ->
                             DownloadTaskCard(task, onRetry = { startDownload(task.source, task.audioOnly) })
                         }
                     }
@@ -517,12 +513,11 @@ fun DownloadsScreen(
                         icon = Icons.Default.VideoLibrary
                     )
                 } else {
-                    LazyColumn(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = PaddingValues(bottom = 12.dp)
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(downloaded, key = { it.uri.toString() }) { file ->
+                        downloaded.forEach { file ->
                             DownloadedFileCard(file, onPlay = { onPlayDownloaded(file) })
                         }
                     }
