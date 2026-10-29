@@ -48,6 +48,7 @@ fun FileManagerScreen(
     duplicateScanRunning: Boolean,
     onFilterChange: (ManagerFilter) -> Unit,
     onToggleSelection: (ManagedMediaFile) -> Unit,
+    onOpenFile: (ManagedMediaFile) -> Unit,
     onSelectAll: (List<ManagedMediaFile>) -> Unit,
     onDelete: () -> Unit,
     onMove: () -> Unit,
@@ -214,7 +215,8 @@ fun FileManagerScreen(
                                 ManagedFileRow(
                                     file = file,
                                     selected = file.stableId in selectedUris,
-                                    onToggle = { onToggleSelection(file) }
+                                    onToggle = { onToggleSelection(file) },
+                                    onOpen = { onOpenFile(file) }
                                 )
                             }
                         }
@@ -236,7 +238,8 @@ fun FileManagerScreen(
                     ManagedFileRow(
                         file = file,
                         selected = file.stableId in selectedUris,
-                        onToggle = { onToggleSelection(file) }
+                        onToggle = { onToggleSelection(file) },
+                        onOpen = { onOpenFile(file) }
                     )
                 }
             }
@@ -335,12 +338,13 @@ private fun ManagedFileThumbnail(file: ManagedMediaFile, modifier: Modifier = Mo
 private fun ManagedFileRow(
     file: ManagedMediaFile,
     selected: Boolean,
-    onToggle: () -> Unit
+    onToggle: () -> Unit,
+    onOpen: () -> Unit
 ) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
             .background(if (selected) ManagerRaised else ManagerSurface)
-            .clickable(onClick = onToggle).padding(horizontal = 9.dp, vertical = 9.dp),
+            .clickable(onClick = onOpen).padding(horizontal = 9.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         ManagedFileThumbnail(file, Modifier.size(58.dp).clip(RoundedCornerShape(11.dp)))
