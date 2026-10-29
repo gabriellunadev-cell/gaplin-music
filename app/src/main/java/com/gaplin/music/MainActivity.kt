@@ -423,6 +423,24 @@ class MainActivity : ComponentActivity() {
                             AppTab.MUSIC -> {
                                 ScreenHeading("Músicas", "${catalog.audio.size} faixas na sua biblioteca")
                                 Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            startActivity(
+                                                Intent(this@MainActivity, FileManagerActivity::class.java)
+                                                    .putExtra("initial_filter", ManagerFilter.AUDIO.name)
+                                            )
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 13.dp, vertical = 5.dp)
+                                    ) {
+                                        Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Selecionar / excluir", fontSize = 11.sp)
+                                    }
+                                }
+                                Row(
                                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp),
                                     horizontalArrangement = Arrangement.spacedBy(7.dp)
                                 ) {
@@ -639,6 +657,24 @@ class MainActivity : ComponentActivity() {
                             )
                             AppTab.VIDEOS -> {
                                 ScreenHeading("Filmes e séries", "${catalog.videos.size} vídeos encontrados")
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            startActivity(
+                                                Intent(this@MainActivity, FileManagerActivity::class.java)
+                                                    .putExtra("initial_filter", ManagerFilter.VIDEO.name)
+                                            )
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 13.dp, vertical = 5.dp)
+                                    ) {
+                                        Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Selecionar / excluir", fontSize = 11.sp)
+                                    }
+                                }
                                 SearchBox(search) { search = it }
                                 val filtered = catalog.videos.filter {
                                     it.title.contains(search, true) || it.seriesName.contains(search, true) ||
