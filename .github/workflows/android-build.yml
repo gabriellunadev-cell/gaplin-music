@@ -34,6 +34,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Python for embedded yt-dlp
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Install Android SDK 36 platform and build tools
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
