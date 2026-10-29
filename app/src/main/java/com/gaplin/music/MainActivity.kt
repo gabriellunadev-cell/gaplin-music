@@ -1929,6 +1929,128 @@ private fun NowPlayingDialog(
     }
 }
 
+
+@Composable
+private fun EqualizerDialog(
+    state: EqualizerSnapshot,
+    onDismiss: () -> Unit,
+    onEnabled: (Boolean) -> Unit,
+    onPreset: (String) -> Unit,
+    onBandChange: (Int, Float) -> Unit
+) {
+    val presets = AudioEqualizerController.presetNames
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp).heightIn(max = 680.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = Color(0xFF0B1530),
+            tonalElevation = 8.dp
+        ) {
+            Column(Modifier.padding(18.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("EQUALIZADOR", color = VioletSoft, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                        Text("Seu som, do seu jeito", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, "Fechar equalizador", tint = TextMuted)
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+                if (!state.supported) {
+                    Box(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                            .background(SurfaceDark).padding(18.dp)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Equalizer, null, tint = VioletSoft, modifier = Modifier.size(35.dp))
+                            Spacer(Modifier.height(9.dp))
+                            Text(
+                                state.message ?: "Inicie uma música para conectar o equalizador ao player.",
+                                color = Color.White,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                } else {
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                            .background(SurfaceDark).padding(horizontal = 12.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Equalizador ativo", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text("Processamento na sessão de áudio atual", color = TextMuted, fontSize = 10.sp)
+                        }
+                        Switch(checked = state.enabled, onCheckedChange = onEnabled)
+                    }
+
+                    Spacer(Modifier.height(13.dp))
+                    Text("PREDEFINIÇÕES", color = VioletSoft, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
+                    Spacer(Modifier.height(7.dp))
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        presets.forEach { preset ->
+                            FilterChip(
+                                selected = state.preset == preset,
+                                onClick = { onPreset(preset) },
+                                label = { Text(preset, fontSize = 11.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFF512477),
+                                    selectedLabelColor = Color.White,
+                                    labelColor = TextMuted
+                                )
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("AJUSTE MANUAL", color = VioletSoft, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
+                        Spacer(Modifier.weight(1f))
+                        Text("${state.minDb.toInt()} a +${state.maxDb.toInt()} dB", color = TextMuted, fontSize = 9.sp)
+                    }
+                    Column(
+                        Modifier.fillMaxWidth().weight(1f, fill = false)
+                            .heightIn(max = 390.dp).verticalScroll(rememberScrollState())
+                    ) {
+                        state.bands.forEach { band ->
+                            Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(band.label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    Spacer(Modifier.weight(1f))
+                                    Text(
+                                        String.format(Locale.getDefault(), "%+.1f dB", band.levelDb),
+                                        color = VioletSoft,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                Slider(
+                                    value = band.levelDb.coerceIn(state.minDb, state.maxDb),
+                                    onValueChange = { onBandChange(band.index, it) },
+                                    valueRange = state.minDb..state.maxDb,
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = Color.White,
+                                        activeTrackColor = VioletSoft,
+                                        inactiveTrackColor = Color(0xFF394665)
+                                    )
+                                )
+                            }
+                        }
+                    }
+                    Text("As alterações afetam a reprodução deste aplicativo.", color = TextMuted, fontSize = 9.sp)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun VideoPlaybackPanel(player: Player, title: String, onClose: () -> Unit, onFullscreen: () -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SurfaceDark)) {
