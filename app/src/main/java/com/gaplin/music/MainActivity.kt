@@ -73,7 +73,7 @@ private val TextMuted = Color(0xFF8798BD)
 private data class LocalPlaylist(val id: String, val name: String, val trackUris: List<String>)
 
 private enum class AppTab(val label: String) {
-    HOME("Início"), MUSIC("Músicas"), FILES("Arquivos"), FAVORITES("Favoritos"), VIDEOS("Vídeos")
+    HOME("Início"), MUSIC("Música"), FILES("Pastas"), FAVORITES("Favoritos"), VIDEOS("Vídeo"), MORE("Mais")
 }
 
 class MainActivity : ComponentActivity() {
@@ -115,7 +115,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var catalog by remember { mutableStateOf(MediaSnapshot(emptyList(), emptyList())) }
-            var activeTab by remember { mutableStateOf(AppTab.HOME) }
+            var activeTab by remember { mutableStateOf(AppTab.MUSIC) }
             var search by remember { mutableStateOf("") }
             var favoriteUris by remember { mutableStateOf(loadFavorites()) }
             var currentAudio by remember { mutableStateOf<AudioTrack?>(null) }
@@ -306,32 +306,33 @@ class MainActivity : ComponentActivity() {
                         )
                     },
                     bottomBar = {
-                        NavigationBar(containerColor = Color(0xFF100D17), tonalElevation = 0.dp) {
-                            AppTab.entries.forEach { tab ->
+                        NavigationBar(containerColor = Color(0xFF08142F), tonalElevation = 0.dp) {
+                            listOf(AppTab.MUSIC, AppTab.VIDEOS, AppTab.MORE).forEach { tab ->
+                                val moreSelected = activeTab in setOf(AppTab.HOME, AppTab.FILES, AppTab.FAVORITES, AppTab.MORE)
                                 NavigationBarItem(
-                                    selected = activeTab == tab,
+                                    selected = if (tab == AppTab.MORE) moreSelected else activeTab == tab,
                                     onClick = {
                                         activeTab = tab
                                         selectedFolder = null
                                         selectedSeries = null
+                                        selectedMusicGroup = null
+                                        selectedPlaylistId = null
                                         search = ""
                                     },
                                     icon = {
                                         Icon(
                                             when (tab) {
-                                                AppTab.HOME -> Icons.Default.Home
-                                                AppTab.MUSIC -> Icons.Default.LibraryMusic
-                                                AppTab.FILES -> Icons.Default.FolderOpen
-                                                AppTab.FAVORITES -> Icons.Default.Favorite
+                                                AppTab.MUSIC -> Icons.Default.MusicNote
                                                 AppTab.VIDEOS -> Icons.Default.VideoLibrary
+                                                else -> Icons.Default.MoreHoriz
                                             }, contentDescription = tab.label
                                         )
                                     },
-                                    label = { Text(tab.label, fontSize = 10.sp) },
+                                    label = { Text(tab.label, fontSize = 11.sp) },
                                     colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = VioletSoft,
-                                        selectedTextColor = VioletSoft,
-                                        indicatorColor = Violet.copy(alpha = .18f),
+                                        selectedIconColor = Color.White,
+                                        selectedTextColor = Violet,
+                                        indicatorColor = Violet.copy(alpha = .19f),
                                         unselectedIconColor = TextMuted,
                                         unselectedTextColor = TextMuted
                                     )
@@ -530,6 +531,11 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             }
+                            AppTab.MORE -> MoreScreen(
+                                onHome = { activeTab = AppTab.HOME },
+                                onFolders = { activeTab = AppTab.FILES },
+                                onFavorites = { activeTab = AppTab.FAVORITES }
+                            )
                             AppTab.VIDEOS -> {
                                 ScreenHeading("Filmes e séries", "${catalog.videos.size} vídeos encontrados")
                                 SearchBox(search) { search = it }
