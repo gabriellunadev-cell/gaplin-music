@@ -360,11 +360,11 @@ class YtDlpDownloadManager(context: Context) {
             ?: "Falha desconhecida no motor yt-dlp."
         val details = sanitizeDiagnostic(raw)
 
-        val combined = (details + " " + causeMessage.orEmpty()).lowercase(Locale.ROOT)
+        val combined = (details + " " + causeMessage.orEmpty())
         return DownloadFailurePolicy.userMessage(
             raw = combined,
             hasOwnSession = hasYoutubeCookies(),
-            isYouTube = isYoutubeError(combined)
+            isYouTube = isYoutubeError(combined.lowercase(Locale.ROOT))
         )
     }
 
