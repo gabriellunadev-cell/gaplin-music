@@ -1489,7 +1489,7 @@ private fun ParticleAudioVisualizer(
             Color(0xFFFF55B8)
         )
 
-        fun spectrum(x: Float): Float {
+        fun amplitudeAt(x: Float): Float {
             val index = (x.coerceIn(0f, 1f) * (spectrum.size - 1).coerceAtLeast(0)).toInt()
             val measuredEnergy = spectrum.getOrNull(index)?.coerceIn(0f, 1f) ?: 0f
             val envelope = kotlin.math.sqrt(kotlin.math.sin(Math.PI * x).toFloat().coerceAtLeast(0f))
@@ -1522,7 +1522,7 @@ private fun ParticleAudioVisualizer(
             for (i in 0..columns) {
                 val xFactor = i / columns.toFloat()
                 val x = w * (0.055f + xFactor * 0.89f)
-                val envelope = spectrum(xFactor)
+                val envelope = amplitudeAt(xFactor)
                 val carrier = kotlin.math.sin(xFactor * 12.5f - p * 1.25f + layer * 0.55f)
                 val secondary = kotlin.math.cos(xFactor * 25f + p * 0.72f - layer)
                 val y = centerY + layerOffset +
@@ -1547,7 +1547,7 @@ private fun ParticleAudioVisualizer(
             for (column in 0 until columns) {
                 val xFactor = column / (columns - 1f)
                 val x = w * (0.055f + xFactor * 0.89f)
-                val envelope = spectrum(xFactor)
+                val envelope = amplitudeAt(xFactor)
                 val waveA = kotlin.math.sin(xFactor * 13f - p * 1.25f + depth * 4.2f)
                 val waveB = kotlin.math.cos(xFactor * 23f + p * 0.78f - depth * 5.4f)
                 val crossWave = kotlin.math.sin(depth * 9f + xFactor * 8f - p * 0.55f)
@@ -1578,7 +1578,7 @@ private fun ParticleAudioVisualizer(
         for (i in 0..columns) {
             val xFactor = i / columns.toFloat()
             val x = w * (0.055f + xFactor * 0.89f)
-            val env = spectrum(xFactor)
+            val env = amplitudeAt(xFactor)
             val y = centerY + kotlin.math.sin(xFactor * 15f - p * 1.45f) * h * 0.12f * env
             if (i == 0) signal.moveTo(x, y) else signal.lineTo(x, y)
         }
