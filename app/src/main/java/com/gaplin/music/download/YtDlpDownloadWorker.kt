@@ -63,11 +63,12 @@ class YtDlpDownloadWorker(
                 YoutubeDL.getInstance().init(applicationContext)
                 FFmpeg.getInstance().init(applicationContext)
 
-                val outputDirectory = File(
+                val downloadRoot = File(
                     applicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
                         ?: File(applicationContext.filesDir, "downloads"),
                     "Gaplin Music"
                 )
+                val outputDirectory = File(downloadRoot, id.toString())
                 if (!outputDirectory.exists() && !outputDirectory.mkdirs()) {
                     throw IllegalStateException("Não foi possível criar a pasta de downloads.")
                 }
@@ -151,7 +152,7 @@ class YtDlpDownloadWorker(
 
     private fun isHttpUrl(value: String): Boolean = runCatching {
         val uri = Uri.parse(value)
-        uri.scheme in setOf("http", "https") && !uri.host.isNullOrBlank()
+        (uri.scheme == "http" || uri.scheme == "https") && !uri.host.isNullOrBlank()
     }.getOrDefault(false)
 
     private fun publishToDownloads(source: File): Uri? {
