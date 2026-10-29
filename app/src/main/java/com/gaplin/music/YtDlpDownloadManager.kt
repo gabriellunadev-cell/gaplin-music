@@ -147,15 +147,7 @@ class YtDlpDownloadManager(context: Context) {
 
             // Keep audio/video in one progressive stream: this free runtime does
             // not bundle FFmpeg, so it must not select DASH pairs that require merging.
-            val format = if (audioOnly) {
-                // Do not require a specific container: some YouTube clients only
-                // expose audio as webm/opus or another available audio format.
-                "bestaudio/best"
-            } else {
-                // Prefer a progressive stream (no FFmpeg merge), but retain
-                // broad fallbacks when a source does not expose <=720p muxed media.
-                "best[height<=720][vcodec!=none][acodec!=none]/best[vcodec!=none][acodec!=none]/best[height<=720]/best"
-            }
+            val format = DownloadFormatPolicy.selector(audioOnly)
 
             val request = YtDlpRequest(item.url)
                 .setOutputTemplate(outputTemplate)
