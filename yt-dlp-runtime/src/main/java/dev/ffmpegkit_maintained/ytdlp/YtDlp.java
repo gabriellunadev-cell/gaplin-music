@@ -79,6 +79,16 @@ public class YtDlp {
         });
     }
 
+    public static String configureJsRuntime(String executablePath) throws YtDlpException {
+        ensureInitialized();
+        try {
+            return Python.getInstance().getModule("ytdlp_runner")
+                    .callAttr("configure_js_runtime", executablePath).toJava(String.class);
+        } catch (Exception e) {
+            throw new YtDlpException("Failed to configure QuickJS runtime", e);
+        }
+    }
+
     public static String inspectMedia(String url, String[] options) throws YtDlpException {
         ensureInitialized();
         try {
