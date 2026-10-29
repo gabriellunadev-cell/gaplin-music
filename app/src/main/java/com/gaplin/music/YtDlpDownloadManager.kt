@@ -148,9 +148,13 @@ class YtDlpDownloadManager(context: Context) {
             // Keep audio/video in one progressive stream: this free runtime does
             // not bundle FFmpeg, so it must not select DASH pairs that require merging.
             val format = if (audioOnly) {
-                "bestaudio[ext=m4a]/bestaudio"
+                // Do not require a specific container: some YouTube clients only
+                // expose audio as webm/opus or another available audio format.
+                "bestaudio/best"
             } else {
-                "best[height<=720][vcodec!=none][acodec!=none]/best[vcodec!=none][acodec!=none]"
+                // Prefer a progressive stream (no FFmpeg merge), but retain
+                // broad fallbacks when a source does not expose <=720p muxed media.
+                "best[height<=720][vcodec!=none][acodec!=none]/best[vcodec!=none][acodec!=none]/best[height<=720]/best"
             }
 
             val request = YtDlpRequest(item.url)
@@ -165,11 +169,9 @@ class YtDlpDownloadManager(context: Context) {
                 .addOption("--newline")
 
             val host = Uri.parse(item.url).host.orEmpty().lowercase(Locale.ROOT)
-            if (host == "youtu.be" || host == "youtube.com" || host.endsWith(".youtube.com") || host == "youtube-nocookie.com" || host.endsWith(".youtube-nocookie.com")) {
-                // Current yt-dlp guidance and issue reports identify the Android
-                // player as a workaround for some YouTube SABR/CDN 403 responses.
-                request.addOption("--extractor-args", "youtube:player_client=android")
-            }
+            // Keep yt-dlp's maintained default YouTube client selection.
+            // Forcing only the Android player can expose a reduced format set and
+            // make valid videos fail with "Requested format is not available".
 
             if (item.kind == RemoteMediaKind.VIDEO) {
                 request.addOption("--no-playlist")
