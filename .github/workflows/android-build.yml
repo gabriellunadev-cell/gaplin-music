@@ -2,7 +2,14 @@ name: Android Debug APK
 
 on:
   push:
-    branches: [main, refactor/stability-and-player-ui, feature/file-manager-smart-duplicates, fix/premium-player-3d-ui-20261029]
+    branches:
+      - main
+      - refactor/stability-and-player-ui
+      - feature/file-manager-smart-duplicates
+      - fix/premium-player-3d-ui-20261029
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -14,11 +21,13 @@ concurrency:
 
 jobs:
   build:
-    name: Build Gaplin Music APK
+    name: Build and verify Gaplin Music APK
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     env:
-      ANDROID_HOME: /usr/local/lib/android/sdk
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_HOME: ${{ runner.temp }}/android-sdk
+      ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -29,26 +38,37 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Verify Android SDK
+      - name: Install Android SDK 36
+        uses: android-actions/setup-android@v3
+
+      - name: Install required Android components
         run: |
-          test -d "$ANDROID_HOME/platforms/android-36"
-          test -d "$ANDROID_HOME/build-tools/36.0.0"
-          echo "Android SDK 36 disponível"
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
+          sdkmanager --list_installed
 
       - name: Set up Gradle 8.13
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
 
-      - name: Build Debug APK
-        run: gradle --no-daemon --stacktrace assembleDebug
+      - name: Verify build toolchain
+        run: |
+          java -version
+          gradle --version
+          test -d "$ANDROID_HOME/platforms/android-36"
+          test -d "$ANDROID_HOME/build-tools/36.0.0"
 
-      - name: Verify APK
+      - name: Run unit tests and build APK
+        run: gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug
+
+      - name: Verify generated APK
         run: |
           test -s app/build/outputs/apk/debug/app-debug.apk
+          sha256sum app/build/outputs/apk/debug/app-debug.apk
           ls -lh app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Upload Debug APK
+      - name: Upload installable debug APK
         uses: actions/upload-artifact@v4
         with:
           name: gaplin-music-debug-apk
