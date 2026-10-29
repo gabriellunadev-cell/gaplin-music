@@ -6,7 +6,7 @@ https://github.com/JunkFood02/youtubedl-android.
 ## Arquitetura
 
 - Jetpack Compose: interface de consulta de link, escolha de mídia e fila.
-- yt-dlp: consulta de metadados e extração de formatos.
+- yt-dlp: consulta de metadados e extração de formatos. Na inicialização, o app consulta a versão estável e tenta atualizar o executável interno; se a API do GitHub estiver indisponível, mantém o motor instalado e registra o aviso, sem bloquear o downloader.
 - FFmpeg: remux de vídeo e conversão de áudio para MP3.
 - WorkManager: execução persistente, progresso, cancelamento e notificações.
 - MediaStore Downloads: publicação dos arquivos em Download/Gaplin Music no Android 10 ou superior.
