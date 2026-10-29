@@ -354,8 +354,8 @@ class MainActivity : ComponentActivity() {
                             .padding(horizontal = 18.dp)
                     ) {
                         TopBrand(onRefresh = ::scanLibrary)
-                        Box(Modifier.weight(1f).fillMaxWidth()) {
-                        when (activeTab) {
+                        Column(Modifier.weight(1f).fillMaxWidth()) {
+                            when (activeTab) {
                             AppTab.HOME -> HomeScreen(
                                 catalog = catalog,
                                 currentAudio = currentAudio,
@@ -1052,17 +1052,32 @@ private fun ScreenHeading(title: String, subtitle: String) {
 
 @Composable
 private fun SearchBox(value: String, onChange: (String) -> Unit) {
-    OutlinedTextField(
-        value = value, onValueChange = onChange, modifier = Modifier.fillMaxWidth().padding(bottom = 11.dp),
-        placeholder = { Text("Buscar nesta biblioteca", color = TextMuted) },
-        leadingIcon = { Icon(Icons.Default.Search, null, tint = VioletSoft) },
-        singleLine = true, shape = RoundedCornerShape(15.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = Violet, unfocusedBorderColor = Color(0xFF393344),
-            focusedContainerColor = SurfaceDark, unfocusedContainerColor = SurfaceDark,
-            focusedTextColor = Color.White, unfocusedTextColor = Color.White, cursorColor = VioletSoft
+    val shape = RoundedCornerShape(15.dp)
+    Box(
+        Modifier.fillMaxWidth()
+            .padding(bottom = 11.dp)
+            .clip(shape)
+            .background(SurfaceDark)
+    ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onChange,
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("Buscar nesta biblioteca", color = TextMuted) },
+            leadingIcon = { Icon(Icons.Default.Search, null, tint = VioletSoft) },
+            singleLine = true,
+            shape = shape,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Violet,
+                unfocusedBorderColor = Color(0xFF50618A),
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                cursorColor = VioletSoft
+            )
         )
-    )
+    }
 }
 
 @Composable
