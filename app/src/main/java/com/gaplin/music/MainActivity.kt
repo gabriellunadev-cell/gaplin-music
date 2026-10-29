@@ -254,7 +254,7 @@ class MainActivity : ComponentActivity() {
                     .setMediaId(item.uri.toString())
                     .setUri(item.uri)
                     .setMediaMetadata(
-                        MediaMetadata.Builder().setTitle(item.title).setArtist(item.artist).build()
+                        MediaMetadata.Builder().setTitle(item.title).setArtist(item.artist).setAlbumTitle(item.album).setArtworkUri(item.artworkUri).build()
                     )
                     .build()
                 if (queue.isNotEmpty() && startIndex >= 0) {
@@ -609,8 +609,7 @@ class MainActivity : ComponentActivity() {
                             )
                         } else if (currentAudio != null && playerReady) {
                             MiniPlayer(
-                                title = currentAudio!!.title,
-                                subtitle = currentAudio!!.artist,
+                                track = currentAudio!!,
                                 playing = playing,
                                 onToggle = { if (player.isPlaying) player.pause() else player.play() },
                                 onNext = { if (player.hasNextMediaItem()) player.seekToNextMediaItem() },
@@ -864,7 +863,7 @@ private fun TopBrand(onRefresh: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text("GAPLIN", color = VioletSoft, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
             Text("MUSIC", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
-            Text("Your media universe", color = TextMuted, fontSize = 11.sp)
+            Text("Seu universo de mídia", color = TextMuted, fontSize = 11.sp)
         }
         IconButton(onClick = onRefresh) {
             Icon(Icons.Default.Refresh, "Atualizar biblioteca", tint = VioletSoft)
@@ -933,7 +932,7 @@ private fun HomeScreen(
         item {
             Box(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(25.dp))
-                    .background(Brush.linearGradient(listOf(Color(0xFF472078), Color(0xFF211632), Color(0xFF11101A))))
+                    .background(Brush.linearGradient(listOf(Color(0xFF0B2857), Color(0xFF25144E), Color(0xFF080F25))))
                     .padding(19.dp)
             ) {
                 Column {
@@ -1178,19 +1177,17 @@ private fun FolderCard(path: String, count: Int, onClick: () -> Unit) {
 }
 
 @Composable
-private fun MiniPlayer(title: String, subtitle: String, playing: Boolean, onToggle: () -> Unit, onNext: () -> Unit, onOpen: () -> Unit) {
+private fun MiniPlayer(track: AudioTrack, playing: Boolean, onToggle: () -> Unit, onNext: () -> Unit, onOpen: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(17.dp))
             .background(Brush.horizontalGradient(listOf(Color(0xFF35217A), Color(0xFF8F247B), Color(0xFF172B56))))
             .clickable(onClick = onOpen).padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF211A44)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.GraphicEq, null, tint = Cyan, modifier = Modifier.size(27.dp))
-        }
+        TrackArtwork(track, Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)))
         Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-            Text(title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, color = TextMuted, fontSize = 10.sp, maxLines = 1)
+            Text(track.title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(track.artist, color = TextMuted, fontSize = 10.sp, maxLines = 1)
         }
         IconButton(onClick = onToggle) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = VioletSoft) }
         IconButton(onClick = onNext) { Icon(Icons.Default.SkipNext, null, tint = Color.White) }
