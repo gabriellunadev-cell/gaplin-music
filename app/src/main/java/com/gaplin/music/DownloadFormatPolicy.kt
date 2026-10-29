@@ -1,15 +1,14 @@
 package com.gaplin.music
 
 /**
- * Format selection for the embedded yt-dlp runtime.
- *
- * This app does not ship FFmpeg, so video selection prefers a single
- * progressive/muxed stream and audio selection accepts any audio container.
+ * Select formats that the current APK can save without transcoding or merging.
+ * Audio mode must never fall back to a video container.
+ * Video mode requires a single progressive stream containing both tracks.
  */
 internal object DownloadFormatPolicy {
     fun selector(audioOnly: Boolean): String = if (audioOnly) {
-        "bestaudio/best"
+        "bestaudio"
     } else {
-        "best[height<=720][vcodec!=none][acodec!=none]/best[vcodec!=none][acodec!=none]/best[height<=720]/best"
+        "best[height<=720][vcodec!=none][acodec!=none]/best[vcodec!=none][acodec!=none]"
     }
 }
