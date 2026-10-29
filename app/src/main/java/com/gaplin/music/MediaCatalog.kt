@@ -51,10 +51,14 @@ data class MediaSnapshot(
 
 object MediaCatalog {
     @Suppress("DEPRECATION")
-    fun scan(context: Context): MediaSnapshot {
+    fun scan(
+        context: Context,
+        includeAudio: Boolean = true,
+        includeVideo: Boolean = true
+    ): MediaSnapshot {
         return MediaSnapshot(
-            audio = scanAudio(context),
-            videos = scanVideos(context)
+            audio = if (includeAudio) scanAudio(context) else emptyList(),
+            videos = if (includeVideo) scanVideos(context) else emptyList()
         )
     }
 
