@@ -208,7 +208,7 @@ class MainActivity : ComponentActivity() {
                 val cleanName = name.trim()
                 if (cleanName.isEmpty()) return
                 val newPlaylist = LocalPlaylist(
-                    id = UUID.randomUUID().toString(),
+                    id = java.util.UUID.randomUUID().toString(),
                     name = cleanName,
                     trackUris = initialTrack?.let { listOf(it.uri.toString()) } ?: emptyList()
                 )
@@ -801,11 +801,9 @@ class MainActivity : ComponentActivity() {
                 for (index in 0 until array.length()) {
                     val item = array.optJSONObject(index) ?: continue
                     val tracks = item.optJSONArray("tracks") ?: JSONArray()
-                    val uris = buildList {
-                        for (trackIndex in 0 until tracks.length()) {
-                            tracks.optString(trackIndex).takeIf(String::isNotBlank)?.let(::add)
-                        }
-                    }
+                    val uris = (0 until tracks.length())
+                        .map { tracks.optString(it) }
+                        .filter { it.isNotBlank() }
                     val id = item.optString("id")
                     val name = item.optString("name")
                     if (id.isNotBlank() && name.isNotBlank()) add(LocalPlaylist(id, name, uris))
@@ -1329,7 +1327,7 @@ private fun NowPlayingDialog(
                         modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
                         colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = Cyan, inactiveTrackColor = Color(0xFF48516D))
                     )
-                    Text("1.0×", color = TextMuted, fontSize = 11.sp, modifier = Modifier.clickable {
+                    Text("${speed}×", color = TextMuted, fontSize = 11.sp, modifier = Modifier.clickable {
                         speed = when (speed) { 1f -> 1.25f; 1.25f -> 1.5f; 1.5f -> 2f; 2f -> 0.75f; else -> 1f }
                         player.setPlaybackSpeed(speed)
                     })
