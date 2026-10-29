@@ -27,7 +27,7 @@ class PlaybackService : MediaSessionService() {
             ): AudioSink? {
                 return DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(enableFloatOutput)
-                    .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
+                    .setEnableAudioTrackPlaybackParams(enableAudioOutputPlaybackParams)
                     .setAudioProcessors(arrayOf(spectrumProcessor))
                     .build()
             }
