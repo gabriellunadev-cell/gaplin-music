@@ -140,7 +140,13 @@ class YtDlpDownloadManager(context: Context) {
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idIndex)
                     val name = cursor.getString(nameIndex) ?: "Mídia baixada"
-                    val mime = cursor.getString(mimeIndex) ?: mimeFromName(name)
+                    val providerMime = cursor.getString(mimeIndex)
+                    // MediaStore stores uncommon WebM audio as octet-stream;
+                    // recover the real playback MIME from the .weba extension.
+                    val mime = if (
+                        providerMime.isNullOrBlank() ||
+                        providerMime.equals("application/octet-stream", ignoreCase = true)
+                    ) mimeFromName(name) else providerMime
                     val mediaType = cursor.getInt(typeIndex)
                     val audioOnly = mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_AUDIO ||
                         mime.startsWith("audio/") || isAudioExtension(name)
@@ -373,7 +379,12 @@ class YtDlpDownloadManager(context: Context) {
 
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, source.name)
-                put(MediaStore.MediaColumns.MIME_TYPE, mime)
+                // Android MediaStore rejects audio/webm on some devices.
+                // Store the file generically, and retain its real MIME in DownloadedMedia.
+                put(
+                    MediaStore.MediaColumns.MIME_TYPE,
+                    if (audioOnly && extension == "weba") "application/octet-stream" else mime
+                )
                 put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/Gaplin Music")
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
