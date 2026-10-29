@@ -13,6 +13,7 @@ android {
             abiFilters 'arm64-v8a', 'x86_64'
         }
         python {
+            buildPython 'python3.13'
             version '3.13'
             pip {
                 install 'yt-dlp==2026.10.26'
