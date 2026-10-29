@@ -11,7 +11,8 @@ internal object DownloadMimePolicy {
     fun resolvedMime(providerMime: String?, fileName: String, inferredMime: String): String {
         val providerValue = providerMime?.trim().orEmpty()
         if (providerValue.isBlank() || providerValue.equals(GENERIC_MIME, ignoreCase = true)) {
-            return inferredMime
+            val extension = fileName.substringAfterLast('.', "").lowercase()
+            return if (extension == "weba") "audio/webm" else inferredMime
         }
         return providerValue
     }
