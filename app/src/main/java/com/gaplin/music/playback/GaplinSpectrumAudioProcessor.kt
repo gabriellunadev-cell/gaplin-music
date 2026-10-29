@@ -153,7 +153,8 @@ class GaplinSpectrumAudioProcessor : BaseAudioProcessor() {
         )
     }
 
-    override fun onFlush(streamMetadata: AudioProcessor.StreamMetadata) {
+    @Suppress("DEPRECATION")
+    override fun onFlush() {
         sampleIndex = 0
     }
 
