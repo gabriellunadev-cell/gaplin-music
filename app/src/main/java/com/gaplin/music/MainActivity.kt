@@ -867,6 +867,50 @@ private fun TopBrand(onRefresh: () -> Unit) {
 }
 
 @Composable
+private fun MoreScreen(
+    onHome: () -> Unit,
+    onFolders: () -> Unit,
+    onFavorites: () -> Unit
+) {
+    Column(Modifier.fillMaxSize().padding(vertical = 10.dp)) {
+        ScreenHeading("Mais do Gaplin", "Acesse suas ferramentas e coleções")
+        MoreOptionCard("Painel inicial", "Resumo da sua biblioteca", Icons.Default.Home, onHome)
+        MoreOptionCard("Explorador de pastas", "Áudio e vídeo organizados por diretório", Icons.Default.FolderOpen, onFolders)
+        MoreOptionCard("Favoritos", "Suas músicas salvas", Icons.Default.Favorite, onFavorites)
+        Spacer(Modifier.height(20.dp))
+        Text("GAPLIN MUSIC", color = VioletSoft, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+        Text("Sua mídia. Seu espaço. Sua experiência.", color = TextMuted, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun MoreOptionCard(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 10.dp).clip(RoundedCornerShape(18.dp))
+            .background(SurfaceDark).clickable(onClick = onClick).padding(15.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier.size(46.dp).clip(RoundedCornerShape(14.dp))
+                .background(Brush.linearGradient(listOf(Color(0xFF34236F), Color(0xFF123E69)))),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, null, tint = VioletSoft, modifier = Modifier.size(24.dp))
+        }
+        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+            Text(title, color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = TextMuted, fontSize = 11.sp)
+        }
+        Icon(Icons.Default.ChevronRight, null, tint = TextMuted)
+    }
+}
+
+@Composable
 private fun HomeScreen(
     catalog: MediaSnapshot,
     currentAudio: AudioTrack?,
