@@ -165,7 +165,7 @@ class YtDlpDownloadManager(context: Context) {
                 .addOption("--newline")
 
             val host = Uri.parse(item.url).host.orEmpty().lowercase(Locale.ROOT)
-            if (host == "youtu.be" || host.endsWith("youtube.com") || host.endsWith("youtube-nocookie.com")) {
+            if (host == "youtu.be" || host == "youtube.com" || host.endsWith(".youtube.com") || host == "youtube-nocookie.com" || host.endsWith(".youtube-nocookie.com")) {
                 // Current yt-dlp guidance and issue reports identify the Android
                 // player as a workaround for some YouTube SABR/CDN 403 responses.
                 request.addOption("--extractor-args", "youtube:player_client=android")
@@ -182,7 +182,7 @@ class YtDlpDownloadManager(context: Context) {
             val diagnostics = CopyOnWriteArrayList<String>()
             val logCallback = LogCallback { level, message ->
                 if (level == "ERROR" || level == "WARNING") {
-                    diagnostics.add(sanitizeDiagnostic(message))
+                    diagnostics.add("$level: " + sanitizeDiagnostic(message))
                 }
             }
 
@@ -289,7 +289,8 @@ class YtDlpDownloadManager(context: Context) {
         causeMessage: String?,
         diagnostics: List<String>
     ): String {
-        val raw = diagnostics.lastOrNull()
+        val raw = diagnostics.lastOrNull { it.startsWith("ERROR:") }
+            ?: diagnostics.lastOrNull()
             ?: causeMessage?.lineSequence()?.lastOrNull()?.trim()
             ?: "Falha desconhecida no motor yt-dlp."
         val details = sanitizeDiagnostic(raw)
