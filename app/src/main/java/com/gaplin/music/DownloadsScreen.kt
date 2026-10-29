@@ -76,6 +76,7 @@ fun DownloadsScreen(
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
     var engineReady by remember { mutableStateOf(false) }
+    var engineVersion by remember { mutableStateOf("verificando...") }
     var engineError by remember { mutableStateOf<String?>(null) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var selectedSource by rememberSaveable { mutableStateOf("Pesquisar") }
@@ -92,6 +93,7 @@ fun DownloadsScreen(
     LaunchedEffect(manager) {
         try {
             manager.initialize()
+            engineVersion = manager.engineVersion()
             engineReady = true
             downloaded = manager.listDownloaded()
         } catch (error: Exception) {
@@ -220,7 +222,7 @@ fun DownloadsScreen(
                 Text("Downloads", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold)
                 Text(
                     if (downloading) "Seu download está em andamento"
-                    else downloaded.size.toString() + " concluídos • motor yt-dlp",
+                    else downloaded.size.toString() + " concluídos • yt-dlp " + engineVersion,
                     color = DownloadMuted,
                     fontSize = 12.sp
                 )
