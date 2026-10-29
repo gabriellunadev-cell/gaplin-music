@@ -104,7 +104,7 @@ fun DownloadCenterScreen(onRefreshLibrary: () -> Unit) {
     fun inspectUrl() {
         val cleanUrl = url.trim()
         val parsed = runCatching { Uri.parse(cleanUrl) }.getOrNull()
-        if (parsed?.scheme !in setOf("http", "https") || parsed?.host.isNullOrBlank()) {
+        if (parsed == null || (parsed.scheme != "http" && parsed.scheme != "https") || parsed.host.isNullOrBlank()) {
             message = "Cole um link HTTP ou HTTPS válido."
             return
         }
