@@ -73,7 +73,7 @@ class YtDlpDownloadManager(context: Context) {
     }
 
     private fun verifyQuickJsScriptExecution(executable: File) {
-        val script = File(appContext.noBackupFilesDir, "quickjs-self-test.js")
+        val script = File(appContext.cacheDir, "quickjs-self-test.js")
         try {
             script.writeText("console.log('GAPLIN_QJS_OK');", Charsets.UTF_8)
             val process = ProcessBuilder(executable.absolutePath, "--script", script.absolutePath)
@@ -98,38 +98,13 @@ class YtDlpDownloadManager(context: Context) {
             "O downloader exige uma arquitetura Android de 64 bits compatível (ARM64 ou x86_64)."
         )
 
-        val directory = File(appContext.noBackupFilesDir, "quickjs").apply {
-            if (!exists() && !mkdirs()) {
-                throw IllegalStateException("Não foi possível preparar o runtime JavaScript.")
-            }
-        }
-        val executable = File(directory, "qjs-$supportedAbi")
-        val temporary = File(directory, "qjs-$supportedAbi.tmp")
-
-        try {
-            appContext.assets.open("quickjs/$supportedAbi/qjs").use { input ->
-                temporary.outputStream().use { output -> input.copyTo(output) }
-            }
-        } catch (error: Exception) {
-            temporary.delete()
+        // Android 10+ blocks execve from app-writable filesDir/cacheDir (W^X).
+        // jniLibs are extracted by PackageManager into this read-only executable directory.
+        val executable = File(appContext.applicationInfo.nativeLibraryDir, "libqjs.so")
+        if (!executable.isFile || executable.length() <= 0L || !executable.canExecute()) {
             throw IllegalStateException(
-                "O APK não contém o runtime QuickJS para $supportedAbi. Recompile incluindo os binários Android.",
-                error
+                "O APK não contém o runtime QuickJS executável para $supportedAbi em nativeLibraryDir. Recompile incluindo jniLibs."
             )
-        }
-
-        if (executable.exists() && !executable.delete()) {
-            temporary.delete()
-            throw IllegalStateException("Não foi possível atualizar o runtime QuickJS.")
-        }
-        if (!temporary.renameTo(executable)) {
-            temporary.delete()
-            throw IllegalStateException("Não foi possível instalar o runtime QuickJS.")
-        }
-        executable.setReadable(true, true)
-        executable.setWritable(true, true)
-        if (!executable.setExecutable(true, true)) {
-            throw IllegalStateException("O Android não permitiu ativar o runtime QuickJS.")
         }
         return executable
     }
