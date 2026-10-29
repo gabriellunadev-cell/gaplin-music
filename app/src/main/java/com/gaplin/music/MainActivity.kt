@@ -458,7 +458,11 @@ class MainActivity : ComponentActivity() {
                                     "Músicas" -> AudioList(
                                         filtered, currentAudio, favoriteUris,
                                         { playAudio(it, filtered) }, ::toggleFavorite,
-                                        onRequestPermission = { requestMissingPermissions() }
+                                        onRequestPermission = {
+                                            if (audioPermission) folderPicker.launch(selectedTreeUri)
+                                            else requestMissingPermissions()
+                                        },
+                                        emptyActionLabel = if (audioPermission) "Selecionar pasta de músicas" else "Permitir acesso às músicas"
                                     )
                                     "Playlists" -> {
                                         val selectedPlaylist = playlists.firstOrNull { it.id == selectedPlaylistId }
@@ -1233,7 +1237,8 @@ private fun AudioList(
     favorites: Set<String>,
     onPlay: (AudioTrack) -> Unit,
     onFavorite: (AudioTrack) -> Unit,
-    onRequestPermission: (() -> Unit)? = null
+    onRequestPermission: (() -> Unit)? = null,
+    emptyActionLabel: String = "Permitir acesso às músicas"
 ) {
     if (tracks.isEmpty()) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1247,7 +1252,7 @@ private fun AudioList(
                 FilledTonalButton(onClick = onRequestPermission) {
                     Icon(Icons.Default.FolderOpen, null)
                     Spacer(Modifier.width(7.dp))
-                    Text("Permitir acesso às músicas")
+                    Text(emptyActionLabel)
                 }
             }
         }
