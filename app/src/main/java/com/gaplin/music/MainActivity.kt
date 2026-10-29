@@ -180,6 +180,12 @@ class MainActivity : ComponentActivity() {
             val scope = rememberCoroutineScope()
             val snackbarHostState = remember { SnackbarHostState() }
 
+            LaunchedEffect(playbackAudioSessionId) {
+                if (playbackAudioSessionId > 0) {
+                    equalizerSnapshot = AudioEqualizerController.attach(this@MainActivity, playbackAudioSessionId)
+                }
+            }
+
             fun scanLibrary() {
                 if (scanInProgress) return
                 scope.launch {
@@ -885,7 +891,6 @@ class MainActivity : ComponentActivity() {
                         val sessionId = extras.getInt(PlaybackSessionKeys.AUDIO_SESSION_ID, 0)
                         if (sessionId > 0) {
                             playbackAudioSessionId = sessionId
-                            equalizerSnapshot = AudioEqualizerController.attach(this@MainActivity, sessionId)
                         }
                     }
                 }
@@ -893,9 +898,6 @@ class MainActivity : ComponentActivity() {
                 player.addListener(extrasListener)
                 playbackAudioSessionId = player.sessionExtras
                     .getInt(PlaybackSessionKeys.AUDIO_SESSION_ID, 0)
-                if (playbackAudioSessionId > 0) {
-                    equalizerSnapshot = AudioEqualizerController.attach(this@MainActivity, playbackAudioSessionId)
-                }
                 playerReady = true
             } catch (_: Exception) {
                 playerReady = false
