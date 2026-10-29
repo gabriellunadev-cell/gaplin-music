@@ -86,6 +86,7 @@ class MainActivity : ComponentActivity() {
     private var sleepTimerJob: Job? = null
     private var audioPermission by mutableStateOf(false)
     private var videoPermission by mutableStateOf(false)
+    private var mediaRefreshToken by mutableStateOf(0)
     private var selectedTreeUri by mutableStateOf<Uri?>(null)
 
     private val folderPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -178,7 +179,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            LaunchedEffect(audioPermission, videoPermission, selectedTreeUri) {
+            LaunchedEffect(audioPermission, videoPermission, selectedTreeUri, mediaRefreshToken) {
                 if (audioPermission || videoPermission || selectedTreeUri != null) scanLibrary()
             }
 
@@ -802,7 +803,10 @@ class MainActivity : ComponentActivity() {
         } else {
             ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
         }
-        videoPermission = if (Build.VERSION.SDK_INT >= 33) {
+        videoPermission = if (Build.VERSION.SDK_INT >= 34) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED
+        } else if (Build.VERSION.SDK_INT >= 33) {
             ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED
         } else {
             ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
@@ -810,7 +814,19 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestMissingPermissions() {
-        val permissions = if (Build.VERSION.SDK_INT >= 33) {
+        val permissions = if (Build.VERSION.SDK_INT >= 34) {
+            buildList {
+                if (!audioPermission && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                    add(Manifest.permission.READ_MEDIA_AUDIO)
+                }
+                if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_MEDIA_VIDEO) != PackageManager.PERMISSION_GRANTED) {
+                    add(Manifest.permission.READ_MEDIA_VIDEO)
+                }
+                if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) != PackageManager.PERMISSION_GRANTED) {
+                    add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+                }
+            }.toTypedArray()
+        } else if (Build.VERSION.SDK_INT >= 33) {
             buildList {
                 if (!audioPermission) add(Manifest.permission.READ_MEDIA_AUDIO)
                 if (!videoPermission) add(Manifest.permission.READ_MEDIA_VIDEO)
@@ -861,7 +877,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (::player.isInitialized) refreshPermissions()
+        refreshPermissions()
+        mediaRefreshToken += 1
     }
 
     override fun onDestroy() {
