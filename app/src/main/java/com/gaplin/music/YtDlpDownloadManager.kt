@@ -44,10 +44,72 @@ class YtDlpDownloadManager(context: Context) {
         ).apply { mkdirs() }
     }
 
-    fun engineVersion(): String = runCatching { YtDlp.getVersion() }.getOrDefault("desconhecida")
+    @Volatile
+    private var quickJsVersion: String = "não iniciado"
+
+    fun engineVersion(): String = runCatching {
+        "yt-dlp ${YtDlp.getVersion()} · QuickJS-NG $quickJsVersion"
+    }.getOrDefault("desconhecida")
 
     suspend fun initialize() = withContext(Dispatchers.IO) {
         YtDlp.init(appContext)
+        val executable = installQuickJsRuntime()
+        val probe = ProcessBuilder(executable.absolutePath, "--version")
+            .redirectErrorStream(true)
+            .start()
+        if (!probe.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)) {
+            probe.destroyForcibly()
+            throw IllegalStateException("O runtime JavaScript QuickJS não respondeu ao teste de inicialização.")
+        }
+        val output = probe.inputStream.bufferedReader().use { it.readText() }.trim()
+        if (probe.exitValue() != 0 || output.isBlank()) {
+            throw IllegalStateException("O runtime QuickJS não conseguiu iniciar neste aparelho: ${output.take(220)}")
+        }
+        quickJsVersion = output.lineSequence().first().take(60)
+        YtDlp.configureJsRuntime(executable.absolutePath)
+    }
+
+    private fun installQuickJsRuntime(): File {
+        val supportedAbi = Build.SUPPORTED_ABIS.firstOrNull {
+            it == "arm64-v8a" || it == "x86_64"
+        } ?: throw IllegalStateException(
+            "O downloader exige uma arquitetura Android de 64 bits compatível (ARM64 ou x86_64)."
+        )
+
+        val directory = File(appContext.noBackupFilesDir, "quickjs").apply {
+            if (!exists() && !mkdirs()) {
+                throw IllegalStateException("Não foi possível preparar o runtime JavaScript.")
+            }
+        }
+        val executable = File(directory, "qjs-$supportedAbi")
+        val temporary = File(directory, "qjs-$supportedAbi.tmp")
+
+        try {
+            appContext.assets.open("quickjs/$supportedAbi/qjs").use { input ->
+                temporary.outputStream().use { output -> input.copyTo(output) }
+            }
+        } catch (error: Exception) {
+            temporary.delete()
+            throw IllegalStateException(
+                "O APK não contém o runtime QuickJS para $supportedAbi. Recompile incluindo os binários Android.",
+                error
+            )
+        }
+
+        if (executable.exists() && !executable.delete()) {
+            temporary.delete()
+            throw IllegalStateException("Não foi possível atualizar o runtime QuickJS.")
+        }
+        if (!temporary.renameTo(executable)) {
+            temporary.delete()
+            throw IllegalStateException("Não foi possível instalar o runtime QuickJS.")
+        }
+        executable.setReadable(true, true)
+        executable.setWritable(true, true)
+        if (!executable.setExecutable(true, true)) {
+            throw IllegalStateException("O Android não permitiu ativar o runtime QuickJS.")
+        }
+        return executable
     }
 
     suspend fun listDownloaded(): List<DownloadedMedia> = withContext(Dispatchers.IO) {
