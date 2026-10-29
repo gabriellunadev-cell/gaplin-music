@@ -138,7 +138,12 @@ class FileManagerActivity : ComponentActivity() {
             .getString("media_tree_uri", null)?.let(Uri::parse)
         refreshPermissions()
         setContent {
-            var filter by remember { mutableStateOf(ManagerFilter.ALL) }
+            val initialFilter = remember {
+                intent.getStringExtra("initial_filter")
+                    ?.let { runCatching { ManagerFilter.valueOf(it) }.getOrDefault(ManagerFilter.ALL) }
+                    ?: ManagerFilter.ALL
+            }
+            var filter by remember { mutableStateOf(initialFilter) }
             var selectedUris by remember { mutableStateOf<Set<String>>(emptySet()) }
             var showDeleteConfirmation by remember { mutableStateOf(false) }
 
