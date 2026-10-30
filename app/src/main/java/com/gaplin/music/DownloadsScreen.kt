@@ -288,7 +288,7 @@ fun DownloadsScreen(
                 Text("Downloads", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold)
                 Text(
                     if (downloading) "Seu download está em andamento"
-                    else downloaded.size.toString() + " concluídos • yt-dlp " + engineVersion,
+                    else downloaded.size.toString() + " concluídos • " + engineVersion,
                     color = DownloadMuted,
                     fontSize = 12.sp
                 )
