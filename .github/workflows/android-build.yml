@@ -144,6 +144,8 @@ jobs:
           unzip -l "$APK" | grep -q "lib/x86_64/libqjs.so"
           unzip -l "$APK" | grep -q "lib/arm64-v8a/libffmpeg.so"
           unzip -l "$APK" | grep -q "lib/x86_64/libffmpeg.so"
+          unzip -l "$APK" | grep -q "lib/arm64-v8a/libffprobe.so"
+          unzip -l "$APK" | grep -q "lib/x86_64/libffprobe.so"
           sha256sum "$APK"
           ls -lh "$APK"
 
