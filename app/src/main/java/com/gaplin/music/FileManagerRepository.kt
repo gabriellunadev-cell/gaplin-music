@@ -64,7 +64,7 @@ object FileManagerRepository {
                 context,
                 MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                 ManagedMediaKind.AUDIO,
-                "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+                null
             )
         }
         if (includeVideo) {
