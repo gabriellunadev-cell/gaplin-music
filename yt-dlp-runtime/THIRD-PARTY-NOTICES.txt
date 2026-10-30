@@ -19,6 +19,24 @@ Licensed under the MIT License. The full license is available at:
 https://github.com/quickjs-ng/quickjs/blob/v0.17.0/LICENSE
 Runtime version bundled: v0.17.0, compiled for Android arm64-v8a and x86_64.
 
+--------------------------------------------------------------------------------
+FFMPEG
+--------------------------------------------------------------------------------
+Copyright (c) 2000-2025 the FFmpeg developers.
+Bundled version: n7.1.1, built for Android arm64-v8a and x86_64.
+This build enables GPL components and is distributed under GNU GPL version 3.
+The complete license is included at licenses/FFmpeg-COPYING.GPLv3.
+Source: https://github.com/FFmpeg/FFmpeg/tree/n7.1.1
+
+--------------------------------------------------------------------------------
+LAME MP3 ENCODER
+--------------------------------------------------------------------------------
+Copyright (c) 1999-2023 The LAME project.
+Bundled version: 3.100, statically linked as libmp3lame.
+Licensed under GNU Library General Public License version 2.
+The complete license is included at licenses/LAME-COPYING.LGPLv2.
+Source: https://sourceforge.net/projects/lame/files/lame/3.100/
+
 ================================================================================
 Include this file in your application's "Open Source Licenses" or "About"
 screen, or bundle it as an asset accessible to the user.
