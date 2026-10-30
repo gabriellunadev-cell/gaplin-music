@@ -381,7 +381,7 @@ object FileManagerRepository {
     }
 
     private fun kindForExtension(extension: String): ManagedMediaKind? = when (extension) {
-        "mp3", "m4a", "aac", "flac", "wav", "ogg", "opus", "wma" -> ManagedMediaKind.AUDIO
+        "mp3", "m4a", "aac", "flac", "wav", "ogg", "opus", "wma", "weba" -> ManagedMediaKind.AUDIO
         "mp4", "m4v", "mkv", "webm", "3gp", "mpeg", "mpg", "avi", "mov" -> ManagedMediaKind.VIDEO
         "jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "avif" -> ManagedMediaKind.IMAGE
         else -> null
