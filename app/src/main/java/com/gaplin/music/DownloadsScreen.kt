@@ -584,7 +584,7 @@ fun DownloadsScreen(
                         Text("Escolha o formato de saída. O MP3 será convertido pelo FFmpeg integrado.", fontSize = 11.sp)
                         listOf(
                             "mp3" to "MP3 • melhor qualidade (V0)",
-                            "m4a" to "M4A • AAC"
+                            "m4a" to "MP4 / M4A • AAC"
                         ).forEach { (format, label) ->
                             Row(
                                 Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
