@@ -452,7 +452,7 @@ class MainActivity : ComponentActivity() {
                                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp),
                                     horizontalArrangement = Arrangement.spacedBy(7.dp)
                                 ) {
-                                    listOf("Músicas", "Playlists", "Pastas", "Artistas", "Álbuns").forEach { section ->
+                                    listOf("Músicas", "Recentemente adicionadas", "Playlists", "Pastas", "Artistas", "Álbuns").forEach { section ->
                                         Text(
                                             section,
                                             modifier = Modifier.clip(RoundedCornerShape(18.dp))
@@ -490,6 +490,24 @@ class MainActivity : ComponentActivity() {
                                         },
                                         emptyActionLabel = if (audioPermission) "Selecionar pasta de músicas" else "Permitir acesso às músicas"
                                     )
+                                    "Recentemente adicionadas" -> {
+                                        val recentlyAdded = MusicLibraryPolicy.recentlyAdded(filtered)
+                                        if (recentlyAdded.isEmpty()) {
+                                            EmptyPanel(
+                                                Icons.Default.History,
+                                                "Nenhuma música recente",
+                                                "As músicas que você baixar ou adicionar aparecerão aqui, da mais nova para a mais antiga."
+                                            )
+                                        } else {
+                                            AudioList(
+                                                recentlyAdded,
+                                                currentAudio,
+                                                favoriteUris,
+                                                { playAudio(it, recentlyAdded) },
+                                                ::toggleFavorite
+                                            )
+                                        }
+                                    }
                                     "Playlists" -> {
                                         val selectedPlaylist = playlists.firstOrNull { it.id == selectedPlaylistId }
                                         if (selectedPlaylist != null) {
