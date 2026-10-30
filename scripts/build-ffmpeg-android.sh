@@ -107,6 +107,7 @@ PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" ./configure \
   --enable-muxer=image2,ipod,matroska,mp3,mov,mp4,ogg,opus,wav,webm \
   --enable-decoder=aac,flac,mjpeg,mp3,opus,png,vorbis,pcm_s16le,webp \
   --enable-encoder=aac,libmp3lame,mjpeg,png \
+  --enable-filter=aresample,scale \
   --enable-parser=aac,flac,mpegaudio,opus,vorbis \
   --enable-libmp3lame \
   --pkg-config-flags="--static" \
@@ -127,6 +128,8 @@ grep -Rqs '^CONFIG_WEBP_DECODER=yes' ffbuild/config.mak
 grep -Rqs '^CONFIG_MJPEG_ENCODER=yes' ffbuild/config.mak
 grep -Rqs '^CONFIG_PNG_ENCODER=yes' ffbuild/config.mak
 grep -Rqs '^CONFIG_ZLIB=yes' ffbuild/config.mak
+grep -Rqs '^CONFIG_SCALE_FILTER=yes' ffbuild/config.mak
+grep -Rqs '^CONFIG_ARESAMPLE_FILTER=yes' ffbuild/config.mak
 
 make -j2
 make install
