@@ -30,6 +30,30 @@ class FfmpegRuntimePolicyTest {
     }
 
     @Test
+    fun detectsImageCodecsAndDemuxer() {
+        val decoders = """
+             V..... mjpeg               MJPEG video
+             V..... png                 PNG image
+             V..... webp                WebP image
+        """.trimIndent()
+        val demuxers = """
+             D  image2                  image file demuxer
+             D  aac                     ADTS AAC
+        """.trimIndent()
+        val encoders = """
+             V..... mjpeg               MJPEG encoder
+             V..... png                 PNG encoder
+        """.trimIndent()
+
+        assertTrue(FfmpegRuntimePolicy.supportsComponent(decoders, "mjpeg"))
+        assertTrue(FfmpegRuntimePolicy.supportsComponent(decoders, "png"))
+        assertTrue(FfmpegRuntimePolicy.supportsComponent(decoders, "webp"))
+        assertTrue(FfmpegRuntimePolicy.supportsComponent(demuxers, "image2"))
+        assertTrue(FfmpegRuntimePolicy.supportsComponent(encoders, "mjpeg"))
+        assertFalse(FfmpegRuntimePolicy.supportsComponent(decoders, "image2"))
+    }
+
+    @Test
     fun ignoresHeadersAndEmptyNames() {
         val output = "Muxer\n --\n"
         assertFalse(FfmpegRuntimePolicy.supportsMuxer(output, "mp4"))
