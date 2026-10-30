@@ -132,18 +132,23 @@ echo "Stripping FFmpeg and FFprobe"
 echo "Verifying executable files exist"
 test -s "$OUT"
 test -s "$PROBE_OUT"
+echo "Reading ELF headers with $READELF"
+FFMPEG_HEADER="${ROOT}/ffmpeg-elf-header.txt"
+FFPROBE_HEADER="${ROOT}/ffprobe-elf-header.txt"
+"$READELF" -h "$OUT" > "$FFMPEG_HEADER"
+"$READELF" -h "$PROBE_OUT" > "$FFPROBE_HEADER"
 echo "Verifying ELF class"
-"$READELF" -h "$OUT" | grep -q "Class:.*ELF64"
-"$READELF" -h "$PROBE_OUT" | grep -q "Class:.*ELF64"
+grep -q "Class:.*ELF64" "$FFMPEG_HEADER"
+grep -q "Class:.*ELF64" "$FFPROBE_HEADER"
 echo "Verifying native machine architecture for $ABI"
 case "$ABI" in
   arm64-v8a)
-    "$READELF" -h "$OUT" | grep -q "Machine:.*AArch64"
-    "$READELF" -h "$PROBE_OUT" | grep -q "Machine:.*AArch64"
+    grep -q "Machine:.*AArch64" "$FFMPEG_HEADER"
+    grep -q "Machine:.*AArch64" "$FFPROBE_HEADER"
     ;;
   x86_64)
-    "$READELF" -h "$OUT" | grep -q "Machine:.*Advanced Micro Devices X86-64"
-    "$READELF" -h "$PROBE_OUT" | grep -q "Machine:.*Advanced Micro Devices X86-64"
+    grep -q "Machine:.*Advanced Micro Devices X86-64" "$FFMPEG_HEADER"
+    grep -q "Machine:.*Advanced Micro Devices X86-64" "$FFPROBE_HEADER"
     ;;
 esac
 echo "FFmpeg + FFprobe + libmp3lame verified for $ABI: $OUT ($(stat -c%s "$OUT") bytes), $(stat -c%s "$PROBE_OUT") bytes"
