@@ -317,6 +317,27 @@ object MediaCatalog {
         return MediaSnapshot(audio, videos)
     }
 
+    private fun extractEmbeddedArtwork(context: Context, uri: Uri, cacheKey: String): Uri? {
+        val directory = File(context.cacheDir, "gaplin-audio-artwork")
+        if (!directory.exists() && !directory.mkdirs()) return null
+        val cached = File(directory, "$cacheKey.img")
+        if (cached.isFile && cached.length() > 0L) return Uri.fromFile(cached)
+
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, uri)
+            val picture = retriever.embeddedPicture ?: return null
+            if (picture.isEmpty()) return null
+            cached.outputStream().use { it.write(picture) }
+            Uri.fromFile(cached)
+        } catch (_: Exception) {
+            cached.delete()
+            null
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
+
     private fun normalizePath(path: String): String =
         path.replace('\\', '/').trimEnd('/').ifBlank { "Armazenamento interno" }
 }
