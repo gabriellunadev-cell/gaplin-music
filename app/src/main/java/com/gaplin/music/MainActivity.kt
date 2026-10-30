@@ -491,7 +491,7 @@ class MainActivity : ComponentActivity() {
                                         emptyActionLabel = if (audioPermission) "Selecionar pasta de músicas" else "Permitir acesso às músicas"
                                     )
                                     "Recentemente adicionadas" -> {
-                                        val recentlyAdded = MusicLibraryPolicy.recentlyAdded(filtered)
+                                        val recentlyAdded = MusicLibraryPolicy.recentlyAdded(filtered, { it.dateAddedEpochSeconds }, { it.title })
                                         if (recentlyAdded.isEmpty()) {
                                             EmptyPanel(
                                                 Icons.Default.History,
