@@ -5,6 +5,17 @@ import org.junit.Test
 
 class DownloadFailurePolicyTest {
     @Test
+    fun unsupportedDownloaderOptionHasActionableMessage() {
+        val message = DownloadFailurePolicy.userMessage(
+            "ValueError: Unsupported downloader option: --embed-thumbnail",
+            hasOwnSession = false,
+            isYouTube = true
+        )
+        assertTrue(message.contains("opção incompatível"))
+        assertTrue(message.contains("atualize o Gaplin Music"))
+    }
+
+    @Test
     fun unavailableVideoIsNotReportedAsAFormatFailure() {
         val message = DownloadFailurePolicy.userMessage(
             "[youtube] abc123: This video is not available",
