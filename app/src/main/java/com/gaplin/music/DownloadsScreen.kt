@@ -215,7 +215,11 @@ fun DownloadsScreen(
             selectedSection = "Fila"
             return
         }
-        val requestKey = listOf(item.url, audioOnly, videoHeight, audioFormat).joinToString("|")
+        val requestKey = if (audioOnly) {
+            "${item.url}|audio|$audioFormat"
+        } else {
+            "${item.url}|video|$videoHeight"
+        }
         if (!DownloadExecutionRuntime.reserveRequest(requestKey)) {
             downloadMessage = "Este conteúdo já está em processamento em outra aba."
             selectedSection = "Fila"
