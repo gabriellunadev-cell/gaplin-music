@@ -15,7 +15,8 @@ data class AudioTrack(
     val durationMs: Long,
     val album: String = "Álbum desconhecido",
     val albumId: Long = -1L,
-    val artworkUri: Uri? = null
+    val artworkUri: Uri? = null,
+    val addedAtSeconds: Long = 0L
 )
 
 data class VideoEntry(
@@ -72,7 +73,8 @@ object MediaCatalog {
             MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.ALBUM_ID,
-            MediaStore.Audio.Media.DURATION
+            MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.DATE_ADDED
         )
         val pathColumn = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
             MediaStore.Audio.Media.RELATIVE_PATH else MediaStore.Audio.Media.DATA
@@ -91,6 +93,7 @@ object MediaCatalog {
             val album = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
             val albumId = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
             val duration = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+            val dateAdded = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
             val path = cursor.getColumnIndexOrThrow(pathColumn)
             while (cursor.moveToNext()) {
                 val rawPath = cursor.getString(path).orEmpty()
@@ -104,7 +107,8 @@ object MediaCatalog {
                     albumId = cursor.getLong(albumId),
                     artworkUri = cursor.getLong(albumId).takeIf { it > 0L }?.let {
                         ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), it)
-                    }
+                    },
+                    addedAtSeconds = cursor.getLong(dateAdded)
                 )
             }
         }
@@ -191,7 +195,8 @@ object MediaCatalog {
                             artist = "Arquivo local",
                             uri = file.uri,
                             folderPath = folder,
-                            durationMs = 0L
+                            durationMs = 0L,
+                            addedAtSeconds = file.lastModified() / 1000L
                         )
                         in videoExt -> {
                             val match = Regex("(?i)S(\\d{1,2})E(\\d{1,3})").find(name)
