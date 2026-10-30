@@ -33,7 +33,8 @@ data class ManagedMediaFile(
     val sizeBytes: Long,
     val modifiedSeconds: Long,
     val kind: ManagedMediaKind,
-    val isSaf: Boolean
+    val isSaf: Boolean,
+    val isPrivateDownload: Boolean = false
 ) {
     val stableId: String get() = uri.toString()
 }
@@ -115,7 +116,8 @@ object FileManagerRepository {
                         sizeBytes = file.length().coerceAtLeast(0L),
                         modifiedSeconds = file.lastModified() / 1000L,
                         kind = kind,
-                        isSaf = false
+                        isSaf = false,
+                        isPrivateDownload = true
                     )
                 }
         }
@@ -364,6 +366,13 @@ object FileManagerRepository {
             suffix++
         }
         return "$base ($suffix)$extension"
+    }
+
+    fun deletePrivateDownload(uri: Uri): Boolean {
+        if (!uri.scheme.equals("file", ignoreCase = true)) return false
+        val path = uri.path ?: return false
+        val file = File(path)
+        return file.isFile && runCatching { file.delete() }.getOrDefault(false)
     }
 
     fun deleteSafDocument(context: Context, uri: Uri): Boolean {
