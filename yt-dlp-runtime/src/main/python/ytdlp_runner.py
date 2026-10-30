@@ -162,7 +162,15 @@ def get_version():
         ejs_version = package_version('yt-dlp-ejs')
     except PackageNotFoundError:
         ejs_version = 'ausente'
-    return YT_DLP_VERSION + ' + yt-dlp-ejs ' + ejs_version
+    try:
+        mutagen_version = package_version('mutagen')
+    except PackageNotFoundError:
+        mutagen_version = 'ausente'
+    return (
+        YT_DLP_VERSION
+        + ' + yt-dlp-ejs ' + ejs_version
+        + ' + mutagen ' + mutagen_version
+    )
 
 
 def execute(url, output_template, cli_flags, progress_callback=None):
