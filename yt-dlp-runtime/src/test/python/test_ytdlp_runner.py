@@ -40,6 +40,7 @@ class YtDlpRunnerOptionsTest(unittest.TestCase):
 
     def test_engine_version_reports_the_pinned_ejs_package(self):
         self.assertIn("yt-dlp-ejs 0.8.0", self.runner["get_version"]())
+        self.assertIn("mutagen ", self.runner["get_version"]())
 
     def test_quickjs_temp_directory_is_private_and_configured(self):
         self.assertEqual(os.environ["TMPDIR"], self.fake_temp_dir)
