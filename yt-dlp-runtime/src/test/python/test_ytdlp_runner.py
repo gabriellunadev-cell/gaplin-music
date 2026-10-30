@@ -65,6 +65,10 @@ class YtDlpRunnerOptionsTest(unittest.TestCase):
         self.assertTrue(opts["newline"])
         self.assertTrue(opts["nooverwrites"])
 
+    def test_merge_container_preference_is_mapped(self):
+        opts = self.runner["_cli_to_opts"](["--merge-output-format", "mp4/mkv"])
+        self.assertEqual(opts["merge_output_format"], "mp4/mkv")
+
     def test_audio_extraction_flags_map_to_yt_dlp_api(self):
         opts = self.runner["_cli_to_opts"]([
             "-x",
