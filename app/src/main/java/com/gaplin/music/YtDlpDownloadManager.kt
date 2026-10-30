@@ -52,7 +52,8 @@ class YtDlpDownloadManager(context: Context) {
 
     fun engineVersion(): String = runCatching {
         val ytDlpVersion = YtDlp.getVersion().substringBefore(" +")
-        "yt-dlp $ytDlpVersion • FFmpeg $ffmpegVersion"
+        val quickJsShortVersion = quickJsVersion.substringAfterLast(' ').take(16)
+        "yt-dlp $ytDlpVersion • QuickJS-NG $quickJsShortVersion • FFmpeg $ffmpegVersion"
     }.getOrDefault("motor pronto")
 
     suspend fun initialize() = withContext(Dispatchers.IO) {
