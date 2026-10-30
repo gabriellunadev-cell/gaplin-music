@@ -175,11 +175,22 @@ class YtDlpDownloadManager(context: Context) {
         val script = File(appContext.cacheDir, "quickjs-self-test.js")
         try {
             script.writeText("console.log('GAPLIN_QJS_OK');", Charsets.UTF_8)
-            val process = ProcessBuilder(executable.absolutePath, "--script", script.absolutePath)
-                .redirectErrorStream(true)
-                .start()
-            val exitCode = process.waitFor()
-            val output = process.inputStream.bufferedReader().use { it.readText() }
+            val outputFile = File(appContext.cacheDir, "gaplin-qjs-self-test-${System.nanoTime()}.log")
+            try {
+                val process = ProcessBuilder(executable.absolutePath, "--script", script.absolutePath)
+                    .redirectErrorStream(true)
+                    .redirectOutput(outputFile)
+                    .start()
+                val exitCode = awaitProcessExit(process, 15L, "O QuickJS excedeu o tempo limite no teste interno.")
+                val output = outputFile.takeIf { it.isFile }?.readText(Charsets.UTF_8).orEmpty()
+                if (exitCode != 0 || "GAPLIN_QJS_OK" !in output) {
+                    throw IllegalStateException(
+                        "O QuickJS foi iniciado, mas falhou ao executar JavaScript no Android: ${output.take(220)}"
+                    )
+                }
+            } finally {
+                outputFile.delete()
+            }
             if (exitCode != 0 || "GAPLIN_QJS_OK" !in output) {
                 throw IllegalStateException(
                     "O QuickJS foi iniciado, mas falhou ao executar JavaScript no Android: ${output.take(220)}"
