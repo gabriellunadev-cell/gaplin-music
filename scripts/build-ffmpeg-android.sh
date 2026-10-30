@@ -85,6 +85,7 @@ PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" ./configure \
   --sysroot="$SYSROOT" \
   --enable-cross-compile \
   --enable-pic \
+  --enable-zlib \
   --enable-static \
   --disable-shared \
   --enable-gpl \
@@ -125,6 +126,7 @@ grep -Rqs '^CONFIG_PNG_DECODER=yes' ffbuild/config.mak
 grep -Rqs '^CONFIG_WEBP_DECODER=yes' ffbuild/config.mak
 grep -Rqs '^CONFIG_MJPEG_ENCODER=yes' ffbuild/config.mak
 grep -Rqs '^CONFIG_PNG_ENCODER=yes' ffbuild/config.mak
+grep -Rqs '^CONFIG_ZLIB=yes' ffbuild/config.mak
 
 make -j2
 make install
