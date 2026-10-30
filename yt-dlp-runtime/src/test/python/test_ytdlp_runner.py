@@ -79,6 +79,16 @@ class YtDlpRunnerOptionsTest(unittest.TestCase):
         self.assertEqual(opts["audioformat"], "mp3")
         self.assertEqual(opts["audioquality"], "0")
 
+    def test_cover_art_and_metadata_flags_map_to_yt_dlp_api(self):
+        opts = self.runner["_cli_to_opts"]([
+            "--embed-thumbnail",
+            "--embed-metadata",
+            "--convert-thumbnails", "jpg",
+        ])
+        self.assertTrue(opts["embedthumbnail"])
+        self.assertTrue(opts["addmetadata"])
+        self.assertEqual(opts["convertthumbnails"], "jpg")
+
     def test_extractor_args_are_converted_to_python_structure(self):
         opts = self.runner["_cli_to_opts"]([
             "--extractor-args",
