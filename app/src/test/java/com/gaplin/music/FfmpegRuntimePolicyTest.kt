@@ -50,6 +50,7 @@ class FfmpegRuntimePolicyTest {
         assertTrue(FfmpegRuntimePolicy.supportsComponent(decoders, "png"))
         assertTrue(FfmpegRuntimePolicy.supportsComponent(decoders, "webp"))
         assertTrue(FfmpegRuntimePolicy.supportsComponent(demuxers, "image2"))
+        assertTrue(FfmpegRuntimePolicy.supportsComponent(demuxers, "image_webp_pipe"))
         assertTrue(FfmpegRuntimePolicy.supportsComponent(encoders, "mjpeg"))
         assertFalse(FfmpegRuntimePolicy.supportsComponent(decoders, "image2"))
     }
