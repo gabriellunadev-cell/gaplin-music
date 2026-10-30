@@ -7,6 +7,7 @@ package com.gaplin.music
  */
 internal object DownloadFormatPolicy {
     val videoHeights = listOf(2160, 1080, 720, 480)
+    const val videoMergeContainer = "mp4"
 
     val audioFormats = listOf(
         "mp3" to "MP3",
