@@ -99,6 +99,7 @@ PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" ./configure \
   --disable-postproc \
   --disable-everything \
   --enable-ffmpeg \
+  --enable-ffprobe \
   --enable-protocol=file,pipe \
   --enable-demuxer=aac,flac,matroska,mov,mp3,ogg,wav \
   --enable-muxer=ipod,matroska,mp3,mp4,ogg,opus,wav,webm \
