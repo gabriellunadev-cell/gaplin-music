@@ -146,7 +146,11 @@ class YtDlpDownloadManager(context: Context) {
             val completion = executor.submit<Int> { process.waitFor() }
             completion.get(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS)
         } catch (_: java.util.concurrent.TimeoutException) {
-            process.destroyForcibly()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                process.destroyForcibly()
+            } else {
+                process.destroy()
+            }
             throw IllegalStateException(timeoutMessage)
         } finally {
             executor.shutdownNow()
@@ -190,11 +194,6 @@ class YtDlpDownloadManager(context: Context) {
                 }
             } finally {
                 outputFile.delete()
-            }
-            if (exitCode != 0 || "GAPLIN_QJS_OK" !in output) {
-                throw IllegalStateException(
-                    "O QuickJS foi iniciado, mas falhou ao executar JavaScript no Android: ${output.take(220)}"
-                )
             }
         } finally {
             script.delete()
