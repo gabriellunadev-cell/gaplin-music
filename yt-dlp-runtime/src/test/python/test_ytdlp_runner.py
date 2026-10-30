@@ -80,15 +80,38 @@ class YtDlpRunnerOptionsTest(unittest.TestCase):
         self.assertEqual(opts["audioformat"], "mp3")
         self.assertEqual(opts["audioquality"], "0")
 
-    def test_cover_art_and_metadata_flags_map_to_yt_dlp_api(self):
+    def test_cover_art_and_metadata_flags_build_real_postprocessors(self):
         opts = self.runner["_cli_to_opts"]([
             "--embed-thumbnail",
             "--embed-metadata",
             "--convert-thumbnails", "jpg",
         ])
-        self.assertTrue(opts["embedthumbnail"])
-        self.assertTrue(opts["addmetadata"])
-        self.assertEqual(opts["convertthumbnails"], "jpg")
+
+        self.assertTrue(opts["writethumbnail"])
+        postprocessors = opts["postprocessors"]
+        self.assertEqual(
+            [item["key"] for item in postprocessors],
+            ["FFmpegThumbnailsConvertor", "FFmpegMetadata", "EmbedThumbnail"],
+        )
+        self.assertEqual(postprocessors[0]["format"], "jpg")
+        self.assertEqual(postprocessors[0]["when"], "before_dl")
+        self.assertTrue(postprocessors[1]["add_metadata"])
+        self.assertEqual(postprocessors[2]["already_have_thumbnail"], False)
+        self.assertNotIn("embedthumbnail", opts)
+        self.assertNotIn("addmetadata", opts)
+        self.assertNotIn("convertthumbnails", opts)
+
+    def test_cover_art_output_template_suppresses_separate_playlist_thumbnail(self):
+        opts = self.runner["_cli_to_opts"](["--embed-thumbnail"])
+        self.runner["_apply_output_template"](opts, "/tmp/gaplin/%(title)s [%(id)s].%(ext)s")
+        self.assertEqual(
+            opts["outtmpl"],
+            {
+                "default": "/tmp/gaplin/%(title)s [%(id)s].%(ext)s",
+                "pl_thumbnail": "",
+            },
+        )
+        self.assertNotIn("_gaplin_suppress_playlist_thumbnail", opts)
 
     def test_extractor_args_are_converted_to_python_structure(self):
         opts = self.runner["_cli_to_opts"]([
