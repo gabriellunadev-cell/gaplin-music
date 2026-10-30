@@ -92,7 +92,7 @@ class YtDlpDownloadManager(context: Context) {
             throw IllegalStateException("O FFprobe nativo não passou na verificação de inicialização.")
         }
         val muxers = runNativeTool(ffmpeg, "-hide_banner", "-muxers")
-        if (!muxers.contains("mp4")) {
+        if (!FfmpegRuntimePolicy.supportsMuxer(muxers, "mp4")) {
             throw IllegalStateException("O FFmpeg incluído não oferece o contêiner MP4.")
         }
         ffmpegVersion = ffmpegVersionOutput.lineSequence().firstOrNull().orEmpty()
@@ -337,8 +337,8 @@ class YtDlpDownloadManager(context: Context) {
                 "%(title).120B [%(id)s].%(ext)s"
             ).absolutePath
 
-            // Keep audio/video in one progressive stream: this free runtime does
-            // not bundle FFmpeg, so it must not select DASH pairs that require merging.
+            // The packaged FFmpeg includes MP4 and Matroska muxers. Download separate
+            // video/audio streams and merge them into a mobile-friendly MP4 container.
             val format = DownloadFormatPolicy.selector(audioOnly, videoHeight)
 
             val request = YtDlpRequest(item.url)
@@ -357,7 +357,7 @@ class YtDlpDownloadManager(context: Context) {
                     .addOption("--audio-format", safeAudioFormat)
                     .addOption("--audio-quality", "0")
             } else {
-                request.addOption("--merge-output-format", "mp4/mkv")
+                request.addOption("--merge-output-format", DownloadFormatPolicy.videoMergeContainer)
             }
 
             if (isYouTubeUrl(item.url) && hasYoutubeCookies()) {
