@@ -45,7 +45,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 private val DownloadAccent = Color(0xFFB88AFF)
@@ -98,11 +97,11 @@ fun DownloadsScreen(
     var results by remember { mutableStateOf<List<RemoteMediaResult>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
     var searchError by remember { mutableStateOf<String?>(null) }
-    var downloading by remember { mutableStateOf(false) }
+    val downloadInProgress by DownloadExecutionRuntime.active.collectAsState()
+    val completionVersion by DownloadExecutionRuntime.completionVersion.collectAsState()
     var downloadMessage by remember { mutableStateOf<String?>(null) }
     var downloaded by remember { mutableStateOf<List<DownloadedMedia>>(emptyList()) }
     val tasks = remember { mutableStateListOf<DownloadUiTask>() }
-    val downloadMutex = remember { Mutex() }
     var cookiesConfigured by remember { mutableStateOf(manager.hasYoutubeCookies()) }
     var cookieMessage by remember { mutableStateOf<String?>(null) }
     val cookiesPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -140,6 +139,13 @@ fun DownloadsScreen(
 
     LaunchedEffect(manager) {
         initializeEngine()
+    }
+
+    LaunchedEffect(manager, engineReady, completionVersion) {
+        if (engineReady) {
+            runCatching { manager.listDownloaded() }
+                .onSuccess { downloaded = it }
+        }
     }
 
     fun performSearch() {
@@ -228,13 +234,13 @@ fun DownloadsScreen(
 
         // Downloads run one at a time. The Mutex preserves FIFO order and avoids
         // racing the embedded Python runtime or publishing files concurrently.
-        scope.launch {
-            downloadMutex.withLock {
+        DownloadExecutionRuntime.scope.launch {
+            DownloadExecutionRuntime.mutex.withLock {
+                DownloadExecutionRuntime.active.value = true
                 val queuedIndex = tasks.indexOfFirst { it.id == taskId }
                 if (queuedIndex >= 0) {
                     tasks[queuedIndex] = tasks[queuedIndex].copy(status = "Verificando")
                 }
-                downloading = true
                 try {
                     val files = manager.download(
                         item = item,
@@ -264,6 +270,7 @@ fun DownloadsScreen(
                         }
                     )
                     downloaded = manager.listDownloaded()
+                    DownloadExecutionRuntime.completionVersion.value += 1
                     val index = tasks.indexOfFirst { it.id == taskId }
                     if (index >= 0) {
                         tasks[index] = tasks[index].copy(
@@ -286,7 +293,7 @@ fun DownloadsScreen(
                     }
                     downloadMessage = message
                 } finally {
-                    downloading = false
+                    DownloadExecutionRuntime.active.value = false
                 }
             }
         }
@@ -300,7 +307,7 @@ fun DownloadsScreen(
             Column(Modifier.weight(1f)) {
                 Text("Downloads", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold)
                 Text(
-                    if (downloading) "Seu download está em andamento"
+                    if (downloadInProgress) "Seu download está em andamento"
                     else downloaded.size.toString() + " concluídos • " + engineVersion,
                     color = DownloadMuted,
                     fontSize = 12.sp
@@ -345,7 +352,7 @@ fun DownloadsScreen(
                 DownloadDetail(
                     item = detailItem,
                     engineReady = engineReady,
-                    downloading = downloading,
+                    downloading = downloadInProgress,
                     onBack = { selectedResult = null },
                     onDownloadAudio = { pendingDownloadChoice = PendingDownloadChoice(detailItem, true) },
                     onDownloadVideo = { pendingDownloadChoice = PendingDownloadChoice(detailItem, false) }
