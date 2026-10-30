@@ -112,16 +112,32 @@ PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" ./configure \
   --extra-ldflags="-L$PREFIX/lib $LDFLAGS" \
   --extra-libs="-lm -ldl"
 
+# Check feature selection in FFmpeg's generated build configuration.
+grep -Rqs '^CONFIG_FFPROBE=yes' ffbuild/config.mak
+grep -Rqs '^CONFIG_LIBMP3LAME_ENCODER=yes' ffbuild/config.mak
+grep -Rqs '^CONFIG_MOV_MUXER=yes' ffbuild/config.mak
+
 make -j2
 make install
 install -D -m 0755 "$PREFIX/bin/ffmpeg" "$OUT"
 PROBE_OUT="yt-dlp-runtime/src/main/jniLibs/${ABI}/libffprobe.so"
 install -m 0755 "$PREFIX/bin/ffprobe" "$PROBE_OUT"
 "$STRIP" "$OUT" "$PROBE_OUT"
-"$READELF" -h "$OUT" | grep -E "Class:.*ELF64|Machine:"
-"$READELF" -h "$PROBE_OUT" | grep -E "Class:.*ELF64|Machine:"
-"$OUT" -version | head -n 2
-"$OUT" -hide_banner -encoders 2>/dev/null | grep -q "libmp3lame"
-"$OUT" -hide_banner -muxers 2>/dev/null | grep -q "mp4"
-"$PROBE_OUT" -version | head -n 2
-echo "FFmpeg + FFprobe + libmp3lame ready: $OUT ($(stat -c%s "$OUT") bytes), $(stat -c%s "$PROBE_OUT") bytes"
+
+# Cross-compiled Android ELF files cannot run on the Linux x86_64 runner.
+# Verify ABI and executable files statically here; Android instrumentation runs them later.
+test -s "$OUT"
+test -s "$PROBE_OUT"
+"$READELF" -h "$OUT" | grep -q "Class:.*ELF64"
+"$READELF" -h "$PROBE_OUT" | grep -q "Class:.*ELF64"
+case "$ABI" in
+  arm64-v8a)
+    "$READELF" -h "$OUT" | grep -q "Machine:.*AArch64"
+    "$READELF" -h "$PROBE_OUT" | grep -q "Machine:.*AArch64"
+    ;;
+  x86_64)
+    "$READELF" -h "$OUT" | grep -q "Machine:.*Advanced Micro Devices X86-64"
+    "$READELF" -h "$PROBE_OUT" | grep -q "Machine:.*Advanced Micro Devices X86-64"
+    ;;
+esac
+echo "FFmpeg + FFprobe + libmp3lame verified for $ABI: $OUT ($(stat -c%s "$OUT") bytes), $(stat -c%s "$PROBE_OUT") bytes"
