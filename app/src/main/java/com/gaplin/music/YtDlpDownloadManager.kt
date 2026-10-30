@@ -83,6 +83,14 @@ class YtDlpDownloadManager(context: Context) {
         if (!encoders.contains("libmp3lame")) {
             throw IllegalStateException("O FFmpeg incluído não oferece o codificador MP3 libmp3lame.")
         }
+        val ffprobe = File(ffmpeg.parentFile, "libffprobe.so")
+        if (!ffprobe.isFile || !ffprobe.canExecute()) {
+            throw IllegalStateException("O APK não contém o FFprobe executável necessário para pós-processamento.")
+        }
+        val ffprobeVersion = runNativeTool(ffprobe, "-version")
+        if (!ffprobeVersion.contains("ffprobe version", ignoreCase = true)) {
+            throw IllegalStateException("O FFprobe nativo não passou na verificação de inicialização.")
+        }
         val muxers = runNativeTool(ffmpeg, "-hide_banner", "-muxers")
         if (!muxers.contains("mp4")) {
             throw IllegalStateException("O FFmpeg incluído não oferece o contêiner MP4.")
@@ -348,6 +356,8 @@ class YtDlpDownloadManager(context: Context) {
                 request.addOption("-x")
                     .addOption("--audio-format", safeAudioFormat)
                     .addOption("--audio-quality", "0")
+            } else {
+                request.addOption("--merge-output-format", "mp4/mkv")
             }
 
             if (isYouTubeUrl(item.url) && hasYoutubeCookies()) {
