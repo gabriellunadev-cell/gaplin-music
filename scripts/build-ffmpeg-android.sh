@@ -102,7 +102,7 @@ PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" ./configure \
   --enable-ffprobe \
   --enable-protocol=file,pipe \
   --enable-demuxer=aac,flac,matroska,mov,mp3,ogg,wav \
-  --enable-muxer=ipod,matroska,mp3,mp4,ogg,opus,wav,webm \
+  --enable-muxer=ipod,matroska,mp3,mov,ogg,opus,wav,webm \
   --enable-decoder=aac,flac,mp3,opus,vorbis,pcm_s16le \
   --enable-encoder=aac,libmp3lame \
   --enable-parser=aac,flac,mpegaudio,opus,vorbis \
