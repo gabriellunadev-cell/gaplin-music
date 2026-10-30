@@ -194,6 +194,11 @@ object MediaCatalog {
                     folderPath = normalizePath(cursor.getString(path).orEmpty()),
                     durationMs = cursor.getLong(duration).coerceAtLeast(0L),
                     album = "Downloads",
+                    artworkUri = extractEmbeddedArtwork(
+                        context = context,
+                        uri = ContentUris.withAppendedId(collection, cursor.getLong(id)),
+                        cacheKey = "download-${cursor.getLong(id)}-${cursor.getLong(date)}"
+                    ),
                     mimeType = resolvedMime,
                     dateAddedEpochSeconds = cursor.getLong(date)
                 )
