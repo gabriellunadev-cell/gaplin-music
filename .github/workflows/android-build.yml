@@ -23,7 +23,7 @@ jobs:
   build:
     name: Build and verify Gaplin Music APK
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 90
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -54,6 +54,25 @@ jobs:
           yes | "$SDKMANAGER" --licenses
           "$SDKMANAGER" --install "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
           "$SDKMANAGER" --list_installed
+
+      - name: Install FFmpeg cross-compilation dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake build-essential curl git libtool pkg-config texinfo yasm nasm
+
+      - name: Build FFmpeg and MP3 encoder for Android ABIs
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_API: '24'
+          FFMPEG_TAG: n7.1.1
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="$(find "$ANDROID_HOME/ndk" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          test -n "$ANDROID_NDK_HOME"
+          chmod +x scripts/build-ffmpeg-android.sh
+          for ABI in arm64-v8a x86_64; do
+            scripts/build-ffmpeg-android.sh "$ABI"
+          done
 
       - name: Build QuickJS-NG for Android ABIs
         env:
@@ -123,6 +142,8 @@ jobs:
           test -s "$APK"
           unzip -l "$APK" | grep -q "lib/arm64-v8a/libqjs.so"
           unzip -l "$APK" | grep -q "lib/x86_64/libqjs.so"
+          unzip -l "$APK" | grep -q "lib/arm64-v8a/libffmpeg.so"
+          unzip -l "$APK" | grep -q "lib/x86_64/libffmpeg.so"
           sha256sum "$APK"
           ls -lh "$APK"
 
