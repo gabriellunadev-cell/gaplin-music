@@ -133,18 +133,21 @@ class YtDlpDownloadManager(context: Context) {
     }
 
     private fun runNativeTool(executable: File, vararg arguments: String): String {
-        val process = ProcessBuilder(listOf(executable.absolutePath) + arguments)
-            .redirectErrorStream(true)
-            .start()
-        val output = process.inputStream.bufferedReader().use { it.readText() }
-        if (!process.waitFor(45, java.util.concurrent.TimeUnit.SECONDS)) {
-            process.destroyForcibly()
-            throw IllegalStateException("O FFmpeg excedeu o tempo limite durante a verificação.")
+        val outputFile = File(appContext.cacheDir, "gaplin-native-check-${System.nanoTime()}.log")
+        try {
+            val process = ProcessBuilder(listOf(executable.absolutePath) + arguments)
+                .redirectErrorStream(true)
+                .redirectOutput(outputFile)
+                .start()
+            val exitCode = awaitProcessExit(process, 45L, "O FFmpeg excedeu o tempo limite durante a verificação.")
+            val output = outputFile.takeIf { it.isFile }?.readText(Charsets.UTF_8).orEmpty()
+            if (exitCode != 0) {
+                throw IllegalStateException("Falha ao iniciar FFmpeg: ${output.take(240)}")
+            }
+            return output
+        } finally {
+            outputFile.delete()
         }
-        if (process.exitValue() != 0) {
-            throw IllegalStateException("Falha ao iniciar FFmpeg: ${output.take(240)}")
-        }
-        return output
     }
 
     private fun verifyQuickJsScriptExecution(executable: File) {
