@@ -59,11 +59,19 @@ class YtDlpDownloadManager(context: Context) {
     suspend fun initialize() = withContext(Dispatchers.IO) {
         YtDlp.init(appContext)
         val executable = installQuickJsRuntime()
-        val probe = ProcessBuilder(executable.absolutePath, "--version")
-            .redirectErrorStream(true)
-            .start()
-        val exitCode = probe.waitFor()
-        val output = probe.inputStream.bufferedReader().use { it.readText() }.trim()
+        val probeOutputFile = File(appContext.cacheDir, "gaplin-qjs-version-${System.nanoTime()}.log")
+        val exitCode: Int
+        val output: String
+        try {
+            val probe = ProcessBuilder(executable.absolutePath, "--version")
+                .redirectErrorStream(true)
+                .redirectOutput(probeOutputFile)
+                .start()
+            exitCode = awaitProcessExit(probe, 15L, "O QuickJS excedeu o tempo limite durante a inicialização.")
+            output = probeOutputFile.takeIf { it.isFile }?.readText(Charsets.UTF_8).orEmpty().trim()
+        } finally {
+            probeOutputFile.delete()
+        }
         if (exitCode != 0 || output.isBlank()) {
             throw IllegalStateException("O runtime QuickJS não conseguiu iniciar neste aparelho: ${output.take(220)}")
         }
