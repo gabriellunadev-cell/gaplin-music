@@ -100,7 +100,7 @@ class YtDlpDownloadManager(context: Context) {
         val missingImageSupport =
             imageEncoders.filterNot { FfmpegRuntimePolicy.supportsComponent(encoders, it) } +
                 imageDecoders.filterNot { FfmpegRuntimePolicy.supportsComponent(decoders, it) } +
-                listOf("image2").filterNot { FfmpegRuntimePolicy.supportsComponent(imageDemuxers, it) }
+                listOf("image2", "image_webp_pipe").filterNot { FfmpegRuntimePolicy.supportsComponent(imageDemuxers, it) }
         if (missingImageSupport.isNotEmpty()) {
             throw IllegalStateException(
                 "O FFmpeg não tem os codecs de imagem necessários para incorporar capas: " +
