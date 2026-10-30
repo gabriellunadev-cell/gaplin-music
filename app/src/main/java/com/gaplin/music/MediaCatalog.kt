@@ -42,6 +42,13 @@ data class VideoEntry(
             .ifBlank { folderName }
 }
 
+private data class EmbeddedAudioMetadata(
+    val title: String?,
+    val artist: String?,
+    val album: String?,
+    val artworkUri: Uri?
+)
+
 data class MediaSnapshot(
     val audio: List<AudioTrack>,
     val videos: List<VideoEntry>
@@ -187,18 +194,21 @@ object MediaCatalog {
                     }
                 )
 
+                val mediaUri = ContentUris.withAppendedId(collection, cursor.getLong(id))
+                val embedded = readEmbeddedAudioMetadata(
+                    context = context,
+                    uri = mediaUri,
+                    cacheKey = "download-${cursor.getLong(id)}-${cursor.getLong(date)}"
+                )
                 result += AudioTrack(
-                    title = fileName.substringBeforeLast('.', fileName).ifBlank { "Faixa baixada" },
-                    artist = "Gaplin Music",
-                    uri = ContentUris.withAppendedId(collection, cursor.getLong(id)),
+                    title = embedded.title?.takeIf(String::isNotBlank)
+                        ?: fileName.substringBeforeLast('.', fileName).ifBlank { "Faixa baixada" },
+                    artist = embedded.artist?.takeIf(String::isNotBlank) ?: "Artista desconhecido",
+                    uri = mediaUri,
                     folderPath = normalizePath(cursor.getString(path).orEmpty()),
                     durationMs = cursor.getLong(duration).coerceAtLeast(0L),
-                    album = "Downloads",
-                    artworkUri = extractEmbeddedArtwork(
-                        context = context,
-                        uri = ContentUris.withAppendedId(collection, cursor.getLong(id)),
-                        cacheKey = "download-${cursor.getLong(id)}-${cursor.getLong(date)}"
-                    ),
+                    album = embedded.album?.takeIf(String::isNotBlank) ?: "Downloads",
+                    artworkUri = embedded.artworkUri,
                     mimeType = resolvedMime,
                     dateAddedEpochSeconds = cursor.getLong(date)
                 )
@@ -317,22 +327,35 @@ object MediaCatalog {
         return MediaSnapshot(audio, videos)
     }
 
-    private fun extractEmbeddedArtwork(context: Context, uri: Uri, cacheKey: String): Uri? {
+    private fun readEmbeddedAudioMetadata(
+        context: Context,
+        uri: Uri,
+        cacheKey: String
+    ): EmbeddedAudioMetadata {
         val directory = File(context.cacheDir, "gaplin-audio-artwork")
-        if (!directory.exists() && !directory.mkdirs()) return null
-        val cached = File(directory, "$cacheKey.img")
-        if (cached.isFile && cached.length() > 0L) return Uri.fromFile(cached)
-
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(context, uri)
-            val picture = retriever.embeddedPicture ?: return null
-            if (picture.isEmpty()) return null
-            cached.outputStream().use { it.write(picture) }
-            Uri.fromFile(cached)
+            val title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
+            val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
+                ?: retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST)
+            val album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
+            val picture = retriever.embeddedPicture
+            val artworkUri = if (
+                picture != null && picture.isNotEmpty() && picture.size <= 8 * 1024 * 1024 &&
+                (directory.isDirectory || directory.mkdirs())
+            ) {
+                val cached = File(directory, "$cacheKey.img")
+                if (!cached.isFile || cached.length() != picture.size.toLong()) {
+                    cached.outputStream().use { it.write(picture) }
+                }
+                Uri.fromFile(cached)
+            } else {
+                null
+            }
+            EmbeddedAudioMetadata(title, artist, album, artworkUri)
         } catch (_: Exception) {
-            cached.delete()
-            null
+            EmbeddedAudioMetadata(null, null, null, null)
         } finally {
             runCatching { retriever.release() }
         }
