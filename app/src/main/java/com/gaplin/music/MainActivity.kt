@@ -366,7 +366,7 @@ class MainActivity : ComponentActivity() {
                     },
                     bottomBar = {
                         NavigationBar(containerColor = Color(0xFF08142F), tonalElevation = 0.dp) {
-                            listOf(AppTab.MUSIC, AppTab.VIDEOS, AppTab.MORE).forEach { tab ->
+                            listOf(AppTab.MUSIC, AppTab.VIDEOS, AppTab.DOWNLOADS, AppTab.MORE).forEach { tab ->
                                 val moreSelected = activeTab in setOf(AppTab.HOME, AppTab.FILES, AppTab.FAVORITES, AppTab.MORE)
                                 NavigationBarItem(
                                     selected = if (tab == AppTab.MORE) moreSelected else activeTab == tab,
@@ -383,6 +383,7 @@ class MainActivity : ComponentActivity() {
                                             when (tab) {
                                                 AppTab.MUSIC -> Icons.Default.MusicNote
                                                 AppTab.VIDEOS -> Icons.Default.VideoLibrary
+                                                AppTab.DOWNLOADS -> Icons.Default.Download
                                                 else -> Icons.Default.MoreHoriz
                                             }, contentDescription = tab.label
                                         )
@@ -425,7 +426,7 @@ class MainActivity : ComponentActivity() {
                                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp),
                                     horizontalArrangement = Arrangement.spacedBy(7.dp)
                                 ) {
-                                    listOf("Músicas", "Playlists", "Pastas", "Artistas", "Álbuns").forEach { section ->
+                                    listOf("Músicas", "Recentemente adicionados", "Playlists", "Pastas", "Artistas", "Álbuns").forEach { section ->
                                         Text(
                                             section,
                                             modifier = Modifier.clip(RoundedCornerShape(18.dp))
@@ -447,6 +448,7 @@ class MainActivity : ComponentActivity() {
                                     it.title.contains(search, true) || it.artist.contains(search, true) ||
                                         it.album.contains(search, true) || it.folderPath.contains(search, true)
                                 }
+                                val recentlyAdded = filtered.sortedByDescending { it.addedAtSeconds }
                                 val groupedTracks = when (musicSection) {
                                     "Pastas" -> filtered.groupBy { it.folderPath }
                                     "Artistas" -> filtered.groupBy { it.artist }
@@ -457,6 +459,10 @@ class MainActivity : ComponentActivity() {
                                     "Músicas" -> AudioList(
                                         filtered, currentAudio, favoriteUris,
                                         { playAudio(it, filtered) }, ::toggleFavorite
+                                    )
+                                    "Recentemente adicionados" -> AudioList(
+                                        recentlyAdded, currentAudio, favoriteUris,
+                                        { playAudio(it, recentlyAdded) }, ::toggleFavorite
                                     )
                                     "Playlists" -> {
                                         val selectedPlaylist = playlists.firstOrNull { it.id == selectedPlaylistId }
@@ -596,6 +602,7 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             }
+                            AppTab.DOWNLOADS -> DownloadCenterScreen(onRefreshLibrary = ::scanLibrary)
                             AppTab.MORE -> MoreScreen(
                                 onHome = { activeTab = AppTab.HOME },
                                 onFolders = { activeTab = AppTab.FILES },
