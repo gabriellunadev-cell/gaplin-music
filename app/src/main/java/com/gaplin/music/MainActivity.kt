@@ -88,7 +88,7 @@ private val TextMuted = Color(0xFF8798BD)
 private data class LocalPlaylist(val id: String, val name: String, val trackUris: List<String>)
 
 private enum class AppTab(val label: String) {
-    HOME("Início"), MUSIC("Música"), FILES("Pastas"), FAVORITES("Favoritos"), VIDEOS("Vídeo"), MORE("Mais")
+    HOME("Início"), MUSIC("Música"), FILES("Pastas"), FAVORITES("Favoritos"), VIDEOS("Vídeo"), DOWNLOADS("Downloads"), MORE("Mais")
 }
 
 class MainActivity : ComponentActivity() {
