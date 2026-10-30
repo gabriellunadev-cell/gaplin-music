@@ -76,10 +76,10 @@ object MediaCatalog {
                     scanGaplinDownloadsAudio(context)
             ).distinctBy { "${it.uri.authority}:${it.uri.lastPathSegment}" }
                 .sortedWith(compareByDescending<AudioTrack> { it.dateAddedEpochSeconds }.thenBy { it.title.lowercase() }),
-            videos = if (includeVideo) {
-                (scanVideos(context) + scanGaplinDownloadsVideos(context))
-                    .distinctBy { "${it.folderPath.lowercase()}|${it.title.lowercase()}|${it.mimeType.orEmpty().lowercase()}" }
-            } else emptyList()
+            videos = (
+                (if (includeVideo) scanVideos(context) else emptyList()) +
+                    scanGaplinDownloadsVideos(context)
+            ).distinctBy { "${it.folderPath.lowercase()}|${it.title.lowercase()}|${it.mimeType.orEmpty().lowercase()}" }
         )
     }
 
