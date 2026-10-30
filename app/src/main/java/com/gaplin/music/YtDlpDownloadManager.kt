@@ -165,12 +165,11 @@ class YtDlpDownloadManager(context: Context) {
     suspend fun listDownloaded(): List<DownloadedMedia> = withContext(Dispatchers.IO) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val result = mutableListOf<DownloadedMedia>()
-            val collection = MediaStore.Files.getContentUri("external")
+            val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
             val projection = arrayOf(
-                MediaStore.Files.FileColumns._ID,
-                MediaStore.Files.FileColumns.DISPLAY_NAME,
-                MediaStore.Files.FileColumns.MIME_TYPE,
-                MediaStore.Files.FileColumns.MEDIA_TYPE
+                MediaStore.MediaColumns._ID,
+                MediaStore.MediaColumns.DISPLAY_NAME,
+                MediaStore.MediaColumns.MIME_TYPE
             )
             val relativePath = "${Environment.DIRECTORY_DOWNLOADS}/Gaplin Music/"
             // Query every file in the app's Downloads folder. Audio WebM is not
@@ -185,10 +184,9 @@ class YtDlpDownloadManager(context: Context) {
                 selectionArgs,
                 "${MediaStore.MediaColumns.DATE_ADDED} DESC"
             )?.use { cursor ->
-                val idIndex = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
-                val nameIndex = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DISPLAY_NAME)
-                val mimeIndex = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MIME_TYPE)
-                val typeIndex = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE)
+                val idIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+                val nameIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+                val mimeIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
 
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idIndex)
@@ -201,9 +199,7 @@ class YtDlpDownloadManager(context: Context) {
                         fileName = name,
                         inferredMime = mimeFromName(name)
                     )
-                    val mediaType = cursor.getInt(typeIndex)
-                    val audioOnly = mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_AUDIO ||
-                        mime.startsWith("audio/") || isAudioExtension(name)
+                    val audioOnly = mime.startsWith("audio/") || isAudioExtension(name)
 
                     result += DownloadedMedia(
                         uri = ContentUris.withAppendedId(collection, id),
