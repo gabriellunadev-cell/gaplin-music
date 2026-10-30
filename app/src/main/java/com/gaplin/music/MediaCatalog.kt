@@ -59,11 +59,11 @@ object MediaCatalog {
         includeVideo: Boolean = true
     ): MediaSnapshot {
         return MediaSnapshot(
-            audio = if (includeAudio) {
-                (scanAudio(context) + scanGaplinDownloadsAudio(context))
-                    .distinctBy { it.uri.toString() }
-                    .sortedWith(compareByDescending<AudioTrack> { it.dateAddedEpochSeconds }.thenBy { it.title.lowercase() })
-            } else emptyList(),
+            audio = (
+                (if (includeAudio) scanAudio(context) else emptyList()) +
+                    scanGaplinDownloadsAudio(context)
+            ).distinctBy { "${it.uri.authority}:${it.uri.lastPathSegment}" }
+                .sortedWith(compareByDescending<AudioTrack> { it.dateAddedEpochSeconds }.thenBy { it.title.lowercase() }),
             videos = if (includeVideo) scanVideos(context) else emptyList()
         )
     }
