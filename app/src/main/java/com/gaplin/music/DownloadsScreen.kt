@@ -85,6 +85,7 @@ fun DownloadsScreen(
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
     var engineReady by remember { mutableStateOf(false) }
+    var engineInitializing by remember { mutableStateOf(false) }
     var engineVersion by remember { mutableStateOf("verificando...") }
     var engineError by remember { mutableStateOf<String?>(null) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -118,15 +119,27 @@ fun DownloadsScreen(
         }
     }
 
-    LaunchedEffect(manager) {
-        try {
-            manager.initialize()
-            engineVersion = manager.engineVersion()
-            engineReady = true
-            downloaded = manager.listDownloaded()
-        } catch (error: Exception) {
-            engineError = error.message ?: "Não foi possível iniciar o motor de downloads."
+    fun initializeEngine() {
+        if (engineInitializing) return
+        scope.launch {
+            engineInitializing = true
+            engineError = null
+            engineReady = false
+            try {
+                manager.initialize()
+                engineVersion = manager.engineVersion()
+                engineReady = true
+                downloaded = manager.listDownloaded()
+            } catch (error: Exception) {
+                engineError = error.message ?: "Não foi possível iniciar o motor de downloads."
+            } finally {
+                engineInitializing = false
+            }
         }
+    }
+
+    LaunchedEffect(manager) {
+        initializeEngine()
     }
 
     fun performSearch() {
@@ -295,8 +308,9 @@ fun DownloadsScreen(
             }
             IconButton(onClick = {
                 scope.launch { downloaded = manager.listDownloaded() }
+                if (!engineReady) initializeEngine()
             }) {
-                Icon(Icons.Default.Refresh, "Atualizar downloads", tint = DownloadAccent)
+                Icon(Icons.Default.Refresh, "Atualizar downloads e tentar reconectar o motor", tint = DownloadAccent)
             }
         }
 
@@ -399,7 +413,7 @@ fun DownloadsScreen(
                     }
                     if (!engineReady) {
                         Text(
-                            engineError ?: "Preparando o motor de downloads...",
+                            engineError ?: if (engineInitializing) "Preparando o motor de downloads..." else "Motor indisponível. Toque em atualizar para tentar novamente.",
                             color = if (engineError == null) DownloadMuted else DownloadPink,
                             fontSize = 11.sp
                         )
