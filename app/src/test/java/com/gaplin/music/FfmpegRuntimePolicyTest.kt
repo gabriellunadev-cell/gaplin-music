@@ -38,6 +38,7 @@ class FfmpegRuntimePolicyTest {
         """.trimIndent()
         val demuxers = """
              D  image2                  image file demuxer
+             D  image_webp_pipe         WebP image pipe
              D  aac                     ADTS AAC
         """.trimIndent()
         val encoders = """
