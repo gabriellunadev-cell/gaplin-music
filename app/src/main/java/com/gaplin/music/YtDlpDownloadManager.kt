@@ -47,8 +47,11 @@ class YtDlpDownloadManager(context: Context) {
     @Volatile
     private var quickJsVersion: String = "não iniciado"
 
+    @Volatile
+    private var ffmpegVersion: String = "não iniciado"
+
     fun engineVersion(): String = runCatching {
-        "yt-dlp ${YtDlp.getVersion()} · QuickJS-NG $quickJsVersion"
+        "yt-dlp ${YtDlp.getVersion()} · QuickJS-NG $quickJsVersion · FFmpeg $ffmpegVersion"
     }.getOrDefault("desconhecida")
 
     suspend fun initialize() = withContext(Dispatchers.IO) {
@@ -70,6 +73,48 @@ class YtDlpDownloadManager(context: Context) {
             }
         }
         YtDlp.configureJsRuntime(executable.absolutePath, jsTempDirectory.absolutePath)
+
+        val ffmpeg = installFfmpegRuntime()
+        val ffmpegVersionOutput = runNativeTool(ffmpeg, "-version")
+        if (!ffmpegVersionOutput.contains("ffmpeg version", ignoreCase = true)) {
+            throw IllegalStateException("O FFmpeg nativo não passou na verificação de inicialização.")
+        }
+        val encoders = runNativeTool(ffmpeg, "-hide_banner", "-encoders")
+        if (!encoders.contains("libmp3lame")) {
+            throw IllegalStateException("O FFmpeg incluído não oferece o codificador MP3 libmp3lame.")
+        }
+        val muxers = runNativeTool(ffmpeg, "-hide_banner", "-muxers")
+        if (!muxers.contains("mp4")) {
+            throw IllegalStateException("O FFmpeg incluído não oferece o contêiner MP4.")
+        }
+        ffmpegVersion = ffmpegVersionOutput.lineSequence().firstOrNull().orEmpty()
+            .substringAfter("ffmpeg version", "nativo").trim().take(36)
+        YtDlp.configureFfmpegRuntime(ffmpeg.absolutePath)
+    }
+
+    private fun installFfmpegRuntime(): File {
+        val executable = File(appContext.applicationInfo.nativeLibraryDir, "libffmpeg.so")
+        if (!executable.isFile || executable.length() <= 0L || !executable.canExecute()) {
+            throw IllegalStateException(
+                "O APK não contém o FFmpeg executável para esta arquitetura Android. Recompile incluindo jniLibs."
+            )
+        }
+        return executable
+    }
+
+    private fun runNativeTool(executable: File, vararg arguments: String): String {
+        val process = ProcessBuilder(listOf(executable.absolutePath) + arguments)
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.bufferedReader().use { it.readText() }
+        if (!process.waitFor(45, java.util.concurrent.TimeUnit.SECONDS)) {
+            process.destroyForcibly()
+            throw IllegalStateException("O FFmpeg excedeu o tempo limite durante a verificação.")
+        }
+        if (process.exitValue() != 0) {
+            throw IllegalStateException("Falha ao iniciar FFmpeg: ${output.take(240)}")
+        }
+        return output
     }
 
     private fun verifyQuickJsScriptExecution(executable: File) {
@@ -251,6 +296,8 @@ class YtDlpDownloadManager(context: Context) {
     suspend fun download(
         item: RemoteMediaResult,
         audioOnly: Boolean,
+        videoHeight: Int,
+        audioFormat: String,
         onStage: (String) -> Unit,
         onProgress: (Float, Long) -> Unit
     ): List<DownloadedMedia> = withContext(Dispatchers.IO) {
@@ -263,7 +310,8 @@ class YtDlpDownloadManager(context: Context) {
 
         initialize()
         onStage("Validando disponibilidade")
-        validateMedia(item, audioOnly)
+        val safeAudioFormat = DownloadFormatPolicy.validateAudioFormat(audioFormat)
+        validateMedia(item, audioOnly, videoHeight)
         onStage("Iniciando transferência")
 
         val jobDirectory = File(
@@ -283,7 +331,7 @@ class YtDlpDownloadManager(context: Context) {
 
             // Keep audio/video in one progressive stream: this free runtime does
             // not bundle FFmpeg, so it must not select DASH pairs that require merging.
-            val format = DownloadFormatPolicy.selector(audioOnly)
+            val format = DownloadFormatPolicy.selector(audioOnly, videoHeight)
 
             val request = YtDlpRequest(item.url)
                 .setOutputTemplate(outputTemplate)
@@ -295,6 +343,12 @@ class YtDlpDownloadManager(context: Context) {
                 .addOption("--concurrent-fragments", "1")
                 .addOption("--no-overwrites")
                 .addOption("--newline")
+
+            if (audioOnly) {
+                request.addOption("-x")
+                    .addOption("--audio-format", safeAudioFormat)
+                    .addOption("--audio-quality", "0")
+            }
 
             if (isYouTubeUrl(item.url) && hasYoutubeCookies()) {
                 request.addOption("--cookies", youtubeCookiesFile.absolutePath)
@@ -446,7 +500,7 @@ class YtDlpDownloadManager(context: Context) {
         )
     }
 
-    private fun validateMedia(item: RemoteMediaResult, audioOnly: Boolean) {
+    private fun validateMedia(item: RemoteMediaResult, audioOnly: Boolean, videoHeight: Int) {
         val flags = mutableListOf("--retries", "2", "--extractor-retries", "2")
         if (isYouTubeUrl(item.url) && hasYoutubeCookies()) {
             flags.addAll(listOf("--cookies", youtubeCookiesFile.absolutePath))
@@ -467,14 +521,28 @@ class YtDlpDownloadManager(context: Context) {
         }
 
         val audioFormats = summary.optInt("audio_formats")
-        val progressiveFormats = summary.optInt("progressive_formats")
+        val videoFormats = summary.optInt("video_formats")
         if (audioOnly && audioFormats <= 0) {
-            throw IllegalStateException("Este vídeo não oferece uma faixa de áudio acessível nesta sessão.")
+            throw IllegalStateException("Este conteúdo não oferece uma faixa de áudio acessível nesta sessão.")
         }
-        if (!audioOnly && progressiveFormats <= 0) {
-            throw IllegalStateException(
-                "A fonte não oferece vídeo e áudio no mesmo arquivo. Esta versão não inclui FFmpeg para mesclar faixas separadas."
-            )
+        if (!audioOnly) {
+            if (videoFormats <= 0 || audioFormats <= 0) {
+                throw IllegalStateException("A fonte não oferece faixas compatíveis de vídeo e áudio nesta sessão.")
+            }
+            val heights = summary.optJSONArray("video_heights")
+            val hasRequestedQuality = (0 until (heights?.length() ?: 0)).any { index ->
+                val height = heights?.optInt(index) ?: 0
+                height in 144..videoHeight
+            }
+            if (!hasRequestedQuality) {
+                val available = (0 until (heights?.length() ?: 0))
+                    .mapNotNull { heights?.optInt(it) }
+                    .maxOrNull()
+                throw IllegalStateException(
+                    if (available != null) "Esta fonte não oferece vídeo até ${videoHeight}p. A maior resolução disponível é ${available}p."
+                    else "Esta fonte não disponibiliza uma resolução de vídeo compatível."
+                )
+            }
         }
     }
 
