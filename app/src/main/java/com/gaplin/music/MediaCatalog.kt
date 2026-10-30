@@ -135,9 +135,9 @@ object MediaCatalog {
     private fun scanGaplinDownloadsAudio(context: Context): List<AudioTrack> {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return emptyList()
 
-        val collection = MediaStore.Files.getContentUri("external")
+        val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
         val projection = arrayOf(
-            MediaStore.Files.FileColumns._ID,
+            MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.DISPLAY_NAME,
             MediaStore.MediaColumns.MIME_TYPE,
             MediaStore.MediaColumns.DATE_ADDED,
@@ -155,7 +155,7 @@ object MediaCatalog {
             arrayOf(relativePath),
             "${MediaStore.MediaColumns.DATE_ADDED} DESC"
         )?.use { cursor ->
-            val id = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
+            val id = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
             val name = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
             val mime = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
             val date = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
