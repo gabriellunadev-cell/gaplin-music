@@ -92,6 +92,18 @@ fun DownloadCenterScreen(onRefreshLibrary: () -> Unit) {
         .getWorkInfosByTagFlow(YtDlpDownloadWorker.TAG)
         .collectAsState(initial = emptyList())
 
+    var observedCompletedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    LaunchedEffect(workInfos) {
+        val completedIds = workInfos
+            .filter { it.state == WorkInfo.State.SUCCEEDED }
+            .map { it.id.toString() }
+            .toSet()
+        if (completedIds.any { it !in observedCompletedIds }) {
+            onRefreshLibrary()
+        }
+        observedCompletedIds = completedIds
+    }
+
     val availableHeights = remember(info) {
         info?.formats.orEmpty()
             .filter { it.height > 0 && it.vcodec != "none" }
