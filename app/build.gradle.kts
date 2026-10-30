@@ -20,6 +20,7 @@ android {
         jniLibs {
             useLegacyPackaging = true
             keepDebugSymbols += "**/libqjs.so"
+            keepDebugSymbols += "**/libffmpeg.so"
         }
     }
     compileOptions {
