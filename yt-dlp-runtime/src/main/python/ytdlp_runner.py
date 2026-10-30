@@ -17,6 +17,9 @@ _FFMPEG_PATH = None
 _FLAG_MAP = {
     '-f': ('format', 'str'), '--format': ('format', 'str'),
     '--merge-output-format': ('merge_output_format', 'str'),
+    '--embed-thumbnail': ('embedthumbnail', 'bool'),
+    '--embed-metadata': ('addmetadata', 'bool'),
+    '--convert-thumbnails': ('convertthumbnails', 'str'),
     '-x': ('extractaudio', 'bool'), '--extract-audio': ('extractaudio', 'bool'),
     '--audio-format': ('audioformat', 'str'),
     '--audio-quality': ('audioquality', 'str'),
