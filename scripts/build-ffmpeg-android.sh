@@ -5,10 +5,11 @@ ABI="${1:?Usage: build-ffmpeg-android.sh <arm64-v8a|x86_64>}"
 API="${ANDROID_API:-24}"
 FFMPEG_TAG="${FFMPEG_TAG:-n7.1.1}"
 NDK="${ANDROID_NDK_HOME:?ANDROID_NDK_HOME is required}"
+REPO_ROOT="$(pwd)"
 ROOT="${RUNNER_TEMP:-/tmp}/gaplin-ffmpeg-${ABI}"
 PREFIX="${ROOT}/install"
 SRC="${ROOT}/src"
-OUT="yt-dlp-runtime/src/main/jniLibs/${ABI}/libffmpeg.so"
+OUT="${REPO_ROOT}/yt-dlp-runtime/src/main/jniLibs/${ABI}/libffmpeg.so"
 HOST="linux-x86_64"
 TOOLCHAIN="${NDK}/toolchains/llvm/prebuilt/${HOST}"
 SYSROOT="${TOOLCHAIN}/sysroot"
@@ -120,16 +121,21 @@ grep -Rqs '^CONFIG_MOV_MUXER=yes' ffbuild/config.mak
 make -j2
 make install
 install -D -m 0755 "$PREFIX/bin/ffmpeg" "$OUT"
-PROBE_OUT="yt-dlp-runtime/src/main/jniLibs/${ABI}/libffprobe.so"
+PROBE_OUT="${REPO_ROOT}/yt-dlp-runtime/src/main/jniLibs/${ABI}/libffprobe.so"
+echo "Packaging FFmpeg to $OUT"
 install -m 0755 "$PREFIX/bin/ffprobe" "$PROBE_OUT"
+echo "Stripping FFmpeg and FFprobe"
 "$STRIP" "$OUT" "$PROBE_OUT"
 
 # Cross-compiled Android ELF files cannot run on the Linux x86_64 runner.
 # Verify ABI and executable files statically here; Android instrumentation runs them later.
+echo "Verifying executable files exist"
 test -s "$OUT"
 test -s "$PROBE_OUT"
+echo "Verifying ELF class"
 "$READELF" -h "$OUT" | grep -q "Class:.*ELF64"
 "$READELF" -h "$PROBE_OUT" | grep -q "Class:.*ELF64"
+echo "Verifying native machine architecture for $ABI"
 case "$ABI" in
   arm64-v8a)
     "$READELF" -h "$OUT" | grep -q "Machine:.*AArch64"
