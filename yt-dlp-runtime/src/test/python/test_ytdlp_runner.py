@@ -113,6 +113,42 @@ class YtDlpRunnerOptionsTest(unittest.TestCase):
         )
         self.assertNotIn("_gaplin_suppress_playlist_thumbnail", opts)
 
+    def test_execute_debug_applies_thumbnail_safe_output_template(self):
+        captured = {}
+        original = self.runner["yt_dlp"].YoutubeDL
+
+        class FakeYoutubeDL:
+            def __init__(self, options):
+                captured.update(options)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
+            def download(self, urls):
+                return 0
+
+        try:
+            self.runner["yt_dlp"].YoutubeDL = FakeYoutubeDL
+            self.runner["execute_debug"](
+                "https://example.com/media",
+                "/tmp/gaplin/%(title)s [%(id)s].%(ext)s",
+                ["--embed-thumbnail"],
+            )
+        finally:
+            self.runner["yt_dlp"].YoutubeDL = original
+
+        self.assertTrue(captured["writethumbnail"])
+        self.assertEqual(
+            captured["outtmpl"],
+            {
+                "default": "/tmp/gaplin/%(title)s [%(id)s].%(ext)s",
+                "pl_thumbnail": "",
+            },
+        )
+
     def test_extractor_args_are_converted_to_python_structure(self):
         opts = self.runner["_cli_to_opts"]([
             "--extractor-args",
