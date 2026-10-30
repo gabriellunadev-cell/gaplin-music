@@ -1,9 +1,13 @@
 package com.gaplin.music
 
 internal object MusicLibraryPolicy {
-    fun recentlyAdded(tracks: List<AudioTrack>, limit: Int = 250): List<AudioTrack> =
-        tracks.sortedWith(
-            compareByDescending<AudioTrack> { it.dateAddedEpochSeconds }
-                .thenBy { it.title.lowercase() }
-        ).take(limit.coerceAtLeast(1))
+    fun <T> recentlyAdded(
+        tracks: List<T>,
+        dateAdded: (T) -> Long,
+        title: (T) -> String,
+        limit: Int = 250
+    ): List<T> = tracks.sortedWith(
+        compareByDescending<T> { dateAdded(it) }
+            .thenBy { title(it).lowercase() }
+    ).take(limit.coerceAtLeast(1))
 }
