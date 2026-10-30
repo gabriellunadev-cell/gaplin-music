@@ -16,7 +16,8 @@ data class AudioTrack(
     val album: String = "Álbum desconhecido",
     val albumId: Long = -1L,
     val artworkUri: Uri? = null,
-    val mimeType: String? = null
+    val mimeType: String? = null,
+    val dateAddedEpochSeconds: Long = 0L
 )
 
 data class VideoEntry(
@@ -58,7 +59,11 @@ object MediaCatalog {
         includeVideo: Boolean = true
     ): MediaSnapshot {
         return MediaSnapshot(
-            audio = if (includeAudio) scanAudio(context) else emptyList(),
+            audio = if (includeAudio) {
+                (scanAudio(context) + scanGaplinDownloadsAudio(context))
+                    .distinctBy { it.uri.toString() }
+                    .sortedWith(compareByDescending<AudioTrack> { it.dateAddedEpochSeconds }.thenBy { it.title.lowercase() })
+            } else emptyList(),
             videos = if (includeVideo) scanVideos(context) else emptyList()
         )
     }
@@ -73,7 +78,9 @@ object MediaCatalog {
             MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.ALBUM_ID,
-            MediaStore.Audio.Media.DURATION
+            MediaStore.Audio.Media.DURATION,
+            MediaStore.MediaColumns.DATE_ADDED,
+            MediaStore.MediaColumns.MIME_TYPE
         )
         val pathColumn = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
             MediaStore.Audio.Media.RELATIVE_PATH else MediaStore.Audio.Media.DATA
@@ -95,6 +102,8 @@ object MediaCatalog {
             val album = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
             val albumId = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
             val duration = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+            val dateAdded = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
+            val mimeType = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
             val path = cursor.getColumnIndexOrThrow(pathColumn)
             while (cursor.moveToNext()) {
                 val rawPath = cursor.getString(path).orEmpty()
@@ -108,7 +117,82 @@ object MediaCatalog {
                     albumId = cursor.getLong(albumId),
                     artworkUri = cursor.getLong(albumId).takeIf { it > 0L }?.let {
                         ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), it)
+                    },
+                    mimeType = cursor.getString(mimeType),
+                    dateAddedEpochSeconds = cursor.getLong(dateAdded)
+                )
+            }
+        }
+        return result
+    }
+
+    /**
+     * Downloads made by Gaplin are stored in Downloads/Gaplin Music.
+     * Query MediaStore.Files instead of Audio.Media because Android may index
+     * WebM audio as application/octet-stream and omit it from the audio collection.
+     */
+    private fun scanGaplinDownloadsAudio(context: Context): List<AudioTrack> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return emptyList()
+
+        val collection = MediaStore.Files.getContentUri("external")
+        val projection = arrayOf(
+            MediaStore.Files.FileColumns._ID,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.MIME_TYPE,
+            MediaStore.MediaColumns.DATE_ADDED,
+            MediaStore.MediaColumns.DURATION,
+            MediaStore.MediaColumns.RELATIVE_PATH
+        )
+        val relativePath = "${android.os.Environment.DIRECTORY_DOWNLOADS}/Gaplin Music/"
+        val audioExtensions = setOf("mp3", "m4a", "aac", "flac", "wav", "ogg", "opus", "weba")
+        val result = mutableListOf<AudioTrack>()
+
+        context.contentResolver.query(
+            collection,
+            projection,
+            "${MediaStore.MediaColumns.RELATIVE_PATH}=?",
+            arrayOf(relativePath),
+            "${MediaStore.MediaColumns.DATE_ADDED} DESC"
+        )?.use { cursor ->
+            val id = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
+            val name = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+            val mime = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
+            val date = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
+            val duration = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DURATION)
+            val path = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.RELATIVE_PATH)
+
+            while (cursor.moveToNext()) {
+                val fileName = cursor.getString(name).orEmpty()
+                val extension = fileName.substringAfterLast('.', "").lowercase()
+                val providerMime = cursor.getString(mime).orEmpty()
+                val isAudio = extension in audioExtensions || providerMime.startsWith("audio/")
+                if (!isAudio) continue
+
+                val resolvedMime = DownloadMimePolicy.resolvedMime(
+                    providerMime = providerMime,
+                    fileName = fileName,
+                    inferredMime = when (extension) {
+                        "mp3" -> "audio/mpeg"
+                        "m4a", "mp4" -> "audio/mp4"
+                        "aac" -> "audio/aac"
+                        "flac" -> "audio/flac"
+                        "wav" -> "audio/wav"
+                        "ogg" -> "audio/ogg"
+                        "opus" -> "audio/opus"
+                        "weba", "webm" -> "audio/webm"
+                        else -> "audio/*"
                     }
+                )
+
+                result += AudioTrack(
+                    title = fileName.substringBeforeLast('.', fileName).ifBlank { "Faixa baixada" },
+                    artist = "Gaplin Music",
+                    uri = ContentUris.withAppendedId(collection, cursor.getLong(id)),
+                    folderPath = normalizePath(cursor.getString(path).orEmpty()),
+                    durationMs = cursor.getLong(duration).coerceAtLeast(0L),
+                    album = "Downloads",
+                    mimeType = resolvedMime,
+                    dateAddedEpochSeconds = cursor.getLong(date)
                 )
             }
         }
@@ -169,7 +253,7 @@ object MediaCatalog {
         val root = DocumentFile.fromTreeUri(context, treeUri) ?: return MediaSnapshot(emptyList(), emptyList())
         val audio = mutableListOf<AudioTrack>()
         val videos = mutableListOf<VideoEntry>()
-        val audioExt = setOf("mp3", "m4a", "aac", "flac", "wav", "ogg", "opus")
+        val audioExt = setOf("mp3", "m4a", "aac", "flac", "wav", "ogg", "opus", "weba")
         val videoExt = setOf("mp4", "m4v", "mkv", "webm", "3gp", "mpeg", "mpg")
         fun visit(directory: DocumentFile, depth: Int, relativePath: String) {
             if (depth > 12 || !directory.isDirectory) return
@@ -195,7 +279,9 @@ object MediaCatalog {
                             artist = "Arquivo local",
                             uri = file.uri,
                             folderPath = folder,
-                            durationMs = 0L
+                            durationMs = 0L,
+                            dateAddedEpochSeconds = file.lastModified() / 1000L,
+                            mimeType = file.type
                         )
                         in videoExt -> {
                             val match = Regex("(?i)S(\\d{1,2})E(\\d{1,3})").find(name)
