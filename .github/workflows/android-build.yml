@@ -127,8 +127,8 @@ jobs:
 
       - name: Install and verify yt-dlp EJS Python package
         run: |
-          python -m pip install --disable-pip-version-check "yt-dlp==2026.10.26" "yt-dlp-ejs==0.8.0"
-          python -c "from importlib.metadata import version; assert version('yt-dlp-ejs') == '0.8.0'; print('yt-dlp-ejs', version('yt-dlp-ejs'))"
+          python -m pip install --disable-pip-version-check "yt-dlp==2026.10.26" "yt-dlp-ejs==0.8.0" "mutagen==1.47.0"
+          python -c "from importlib.metadata import version; assert version('yt-dlp-ejs') == '0.8.0'; assert version('mutagen') == '1.47.0'; print('yt-dlp-ejs', version('yt-dlp-ejs'), 'mutagen', version('mutagen'))"
 
       - name: Test downloader option adapter
         run: python -m unittest discover -s yt-dlp-runtime/src/test/python -p "test_*.py" -v
