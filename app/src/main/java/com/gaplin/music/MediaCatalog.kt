@@ -122,6 +122,14 @@ object MediaCatalog {
             val path = cursor.getColumnIndexOrThrow(pathColumn)
             while (cursor.moveToNext()) {
                 val rawPath = cursor.getString(path).orEmpty()
+                // Gaplin downloads are read from MediaStore.Downloads below so their
+                // embedded tags and artwork are preserved instead of a generic audio row.
+                val gaplinDownloadPath = "${Environment.DIRECTORY_DOWNLOADS}/Gaplin Music"
+                if (
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                    rawPath.trimEnd('/') == gaplinDownloadPath
+                ) continue
+
                 result += AudioTrack(
                     title = cursor.getString(title)?.takeIf(String::isNotBlank) ?: "Faixa sem título",
                     artist = cursor.getString(artist)?.takeIf { it.isNotBlank() && it != "<unknown>" } ?: "Artista desconhecido",
