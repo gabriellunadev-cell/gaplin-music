@@ -70,15 +70,22 @@ class YtDlpRunnerOptionsTest(unittest.TestCase):
         opts = self.runner["_cli_to_opts"](["--merge-output-format", "mp4/mkv"])
         self.assertEqual(opts["merge_output_format"], "mp4/mkv")
 
-    def test_audio_extraction_flags_map_to_yt_dlp_api(self):
+    def test_audio_extraction_flags_build_real_postprocessor(self):
         opts = self.runner["_cli_to_opts"]([
             "-x",
             "--audio-format", "mp3",
             "--audio-quality", "0",
         ])
-        self.assertTrue(opts["extractaudio"])
-        self.assertEqual(opts["audioformat"], "mp3")
-        self.assertEqual(opts["audioquality"], "0")
+        extract_audio = next(
+            pp for pp in opts["postprocessors"]
+            if pp["key"] == "FFmpegExtractAudio"
+        )
+        self.assertEqual(extract_audio["preferredcodec"], "mp3")
+        self.assertEqual(extract_audio["preferredquality"], "0")
+        self.assertFalse(extract_audio["nopostoverwrites"])
+        self.assertNotIn("extractaudio", opts)
+        self.assertNotIn("audioformat", opts)
+        self.assertNotIn("audioquality", opts)
 
     def test_cover_art_and_metadata_flags_build_real_postprocessors(self):
         opts = self.runner["_cli_to_opts"]([
