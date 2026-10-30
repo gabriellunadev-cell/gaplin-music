@@ -1566,9 +1566,9 @@ private fun MiniPlayer(track: AudioTrack, playing: Boolean, onToggle: () -> Unit
 @Composable
 private fun TrackArtwork(track: AudioTrack, modifier: Modifier = Modifier) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    var artwork by remember(track.artworkUri) { mutableStateOf<ImageBitmap?>(null) }
+    var artwork by remember(track.uri, track.artworkUri) { mutableStateOf<ImageBitmap?>(null) }
 
-    LaunchedEffect(track.artworkUri) {
+    LaunchedEffect(track.uri, track.artworkUri) {
         artwork = withContext(Dispatchers.IO) {
             track.artworkUri?.let { uri ->
                 runCatching {
