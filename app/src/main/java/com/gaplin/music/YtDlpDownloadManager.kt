@@ -356,6 +356,12 @@ class YtDlpDownloadManager(context: Context) {
                 request.addOption("--merge-output-format", DownloadFormatPolicy.videoMergeContainer)
             }
 
+            // Embed the source thumbnail and metadata in supported media containers.
+            // Mutagen is packaged in Chaquopy for MP3/M4A; FFmpeg remains available as fallback.
+            request.addOption("--embed-thumbnail")
+                .addOption("--embed-metadata")
+                .addOption("--convert-thumbnails", "jpg")
+
             if (isYouTubeUrl(item.url) && hasYoutubeCookies()) {
                 request.addOption("--cookies", youtubeCookiesFile.absolutePath)
             }
