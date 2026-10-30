@@ -28,7 +28,8 @@ data class VideoEntry(
     val durationMs: Long,
     val sizeBytes: Long,
     val season: Int?,
-    val episode: Int?
+    val episode: Int?,
+    val mimeType: String? = null
 ) {
     val seriesName: String
         get() = title
@@ -207,7 +208,8 @@ object MediaCatalog {
             MediaStore.Video.Media._ID,
             MediaStore.Video.Media.DISPLAY_NAME,
             MediaStore.Video.Media.DURATION,
-            MediaStore.Video.Media.SIZE
+            MediaStore.Video.Media.SIZE,
+            MediaStore.MediaColumns.MIME_TYPE
         )
         val pathColumn = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
             MediaStore.Video.Media.RELATIVE_PATH else MediaStore.Video.Media.DATA
@@ -224,6 +226,7 @@ object MediaCatalog {
             val name = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
             val duration = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
             val size = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+            val mimeType = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
             val path = cursor.getColumnIndexOrThrow(pathColumn)
             while (cursor.moveToNext()) {
                 val fileName = cursor.getString(name)?.ifBlank { "Vídeo sem título" } ?: "Vídeo sem título"
@@ -242,7 +245,8 @@ object MediaCatalog {
                     durationMs = cursor.getLong(duration),
                     sizeBytes = cursor.getLong(size),
                     season = season,
-                    episode = episode
+                    episode = episode,
+                    mimeType = cursor.getString(mimeType)
                 )
             }
         }
