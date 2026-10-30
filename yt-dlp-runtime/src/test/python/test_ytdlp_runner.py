@@ -24,7 +24,11 @@ class YtDlpRunnerOptionsTest(unittest.TestCase):
         os.close(handle)
         os.chmod(cls.fake_qjs, 0o700)
         cls.fake_temp_dir = tempfile.mkdtemp(prefix="gaplin-qjs-tmp-")
+        handle, cls.fake_ffmpeg = tempfile.mkstemp(prefix="gaplin-ffmpeg-")
+        os.close(handle)
+        os.chmod(cls.fake_ffmpeg, 0o700)
         cls.runner["configure_js_runtime"](cls.fake_qjs, cls.fake_temp_dir)
+        cls.runner["configure_ffmpeg_runtime"](cls.fake_ffmpeg)
 
     def test_quickjs_runtime_is_configured_as_python_api_mapping(self):
         opts = self.runner["_cli_to_opts"]([])
@@ -32,6 +36,7 @@ class YtDlpRunnerOptionsTest(unittest.TestCase):
             opts["js_runtimes"],
             {"quickjs": {"path": self.fake_qjs}},
         )
+        self.assertEqual(opts["ffmpeg_location"], self.fake_ffmpeg)
 
     def test_engine_version_reports_the_pinned_ejs_package(self):
         self.assertIn("yt-dlp-ejs 0.8.0", self.runner["get_version"]())
@@ -60,6 +65,16 @@ class YtDlpRunnerOptionsTest(unittest.TestCase):
         self.assertTrue(opts["newline"])
         self.assertTrue(opts["nooverwrites"])
 
+    def test_audio_extraction_flags_map_to_yt_dlp_api(self):
+        opts = self.runner["_cli_to_opts"]([
+            "-x",
+            "--audio-format", "mp3",
+            "--audio-quality", "0",
+        ])
+        self.assertTrue(opts["extractaudio"])
+        self.assertEqual(opts["audioformat"], "mp3")
+        self.assertEqual(opts["audioquality"], "0")
+
     def test_extractor_args_are_converted_to_python_structure(self):
         opts = self.runner["_cli_to_opts"]([
             "--extractor-args",
@@ -81,12 +96,14 @@ class YtDlpRunnerOptionsTest(unittest.TestCase):
             "formats": [
                 {"format_id": "140", "url": "https://cdn.example/audio", "acodec": "mp4a.40.2", "vcodec": "none"},
                 {"format_id": "18", "url": "https://cdn.example/muxed", "acodec": "mp4a.40.2", "vcodec": "avc1.42001E"},
-                {"format_id": "137", "url": "https://cdn.example/video", "acodec": "none", "vcodec": "avc1.640028"},
+                {"format_id": "137", "url": "https://cdn.example/video", "acodec": "none", "vcodec": "avc1.640028", "height": 1080},
             ],
         })
         self.assertEqual(summary["id"], "video123")
         self.assertEqual(summary["audio_formats"], 2)
         self.assertEqual(summary["progressive_formats"], 1)
+        self.assertEqual(summary["video_formats"], 2)
+        self.assertEqual(summary["video_heights"], [1080])
         self.assertFalse(summary["is_playlist"])
 
     def test_media_summary_excludes_drm_and_unavailable_formats(self):
@@ -100,6 +117,8 @@ class YtDlpRunnerOptionsTest(unittest.TestCase):
         self.assertEqual(summary["audio_formats"], 0)
         self.assertEqual(summary["progressive_formats"], 0)
         self.assertEqual(summary["format_count"], 0)
+        self.assertEqual(summary["video_formats"], 0)
+        self.assertEqual(summary["video_heights"], [])
 
     def test_playlist_summary_reports_only_accessible_entries(self):
         summary = self.runner["_summarize_media_info"]({
