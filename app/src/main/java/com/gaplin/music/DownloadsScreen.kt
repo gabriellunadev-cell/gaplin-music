@@ -61,10 +61,17 @@ private data class DownloadUiTask(
     val title: String,
     val source: RemoteMediaResult,
     val audioOnly: Boolean,
+    val videoHeight: Int,
+    val audioFormat: String,
     val progress: Float = 0f,
     val etaSeconds: Long = 0L,
     val status: String = "Na fila",
     val error: String? = null
+)
+
+private data class PendingDownloadChoice(
+    val item: RemoteMediaResult,
+    val audioOnly: Boolean
 )
 
 @Composable
@@ -83,7 +90,10 @@ fun DownloadsScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var selectedSource by rememberSaveable { mutableStateOf("Pesquisar") }
     var selectedSection by rememberSaveable { mutableStateOf("Pesquisar") }
-    var selectedResult by remember { mutableStateOf<RemoteMediaResult?>(null) }
+    var selectedResult by remember { mutableStateOf<RemoteMediaResult?>(null)
+    var pendingDownloadChoice by remember { mutableStateOf<PendingDownloadChoice?>(null) }
+    var selectedVideoHeight by rememberSaveable { mutableIntStateOf(1080) }
+    var selectedAudioFormat by rememberSaveable { mutableStateOf("mp3") } }
     var results by remember { mutableStateOf<List<RemoteMediaResult>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
     var searchError by remember { mutableStateOf<String?>(null) }
@@ -160,7 +170,12 @@ fun DownloadsScreen(
         }
     }
 
-    fun startDownload(item: RemoteMediaResult, audioOnly: Boolean) {
+    fun startDownload(
+        item: RemoteMediaResult,
+        audioOnly: Boolean,
+        videoHeight: Int = selectedVideoHeight,
+        audioFormat: String = selectedAudioFormat
+    ) {
         if (!engineReady) {
             downloadMessage = engineError ?: "O motor de downloads ainda está iniciando."
             return
@@ -173,6 +188,7 @@ fun DownloadsScreen(
         val duplicate = tasks.any { task ->
             task.source.url == item.url &&
                 task.audioOnly == audioOnly &&
+                (audioOnly && task.audioFormat == audioFormat || !audioOnly && task.videoHeight == videoHeight) &&
                 task.status in setOf("Na fila", "Verificando", "Preparando", "Baixando", "Concluído")
         }
         if (duplicate) {
@@ -188,6 +204,8 @@ fun DownloadsScreen(
                 title = item.title,
                 source = item,
                 audioOnly = audioOnly,
+                videoHeight = videoHeight,
+                audioFormat = audioFormat,
                 status = "Na fila"
             )
         )
@@ -208,6 +226,8 @@ fun DownloadsScreen(
                     val files = manager.download(
                         item = item,
                         audioOnly = audioOnly,
+                        videoHeight = videoHeight,
+                        audioFormat = audioFormat,
                         onStage = { stage ->
                             mainHandler.post {
                                 val index = tasks.indexOfFirst { it.id == taskId }
@@ -313,8 +333,8 @@ fun DownloadsScreen(
                     engineReady = engineReady,
                     downloading = downloading,
                     onBack = { selectedResult = null },
-                    onDownloadAudio = { startDownload(detailItem, true) },
-                    onDownloadVideo = { startDownload(detailItem, false) }
+                    onDownloadAudio = { pendingDownloadChoice = PendingDownloadChoice(detailItem, true) },
+                    onDownloadVideo = { pendingDownloadChoice = PendingDownloadChoice(detailItem, false) }
                 )
             }
             selectedSection == "Pesquisar" -> {
@@ -462,8 +482,9 @@ fun DownloadsScreen(
                                 item = item,
                                 onOpen = { selectedResult = item },
                                 onQuickDownload = {
-                                    if (item.kind != RemoteMediaKind.CHANNEL) startDownload(item, false)
-                                    else selectedResult = item
+                                    if (item.kind != RemoteMediaKind.CHANNEL) {
+                                        pendingDownloadChoice = PendingDownloadChoice(item, false)
+                                    } else selectedResult = item
                                 }
                             )
                         }
@@ -498,7 +519,10 @@ fun DownloadsScreen(
                         verticalArrangement = Arrangement.spacedBy(9.dp)
                     ) {
                         tasks.forEach { task ->
-                            DownloadTaskCard(task, onRetry = { startDownload(task.source, task.audioOnly) })
+                            DownloadTaskCard(
+                                task,
+                                onRetry = { startDownload(task.source, task.audioOnly, task.videoHeight, task.audioFormat) }
+                            )
                         }
                     }
                 }
@@ -540,6 +564,93 @@ fun DownloadsScreen(
                 TextButton(onClick = { downloadMessage = null }) { Text("OK", color = DownloadAccent) }
             }
         }
+    }
+
+    pendingDownloadChoice?.let { choice ->
+        AlertDialog(
+            onDismissRequest = { pendingDownloadChoice = null },
+            containerColor = DownloadCard,
+            titleContentColor = Color.White,
+            textContentColor = DownloadMuted,
+            title = {
+                Text(
+                    if (choice.audioOnly) "Formato e qualidade do áudio" else "Qualidade do vídeo",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    if (choice.audioOnly) {
+                        Text("Escolha o formato de saída. O MP3 será convertido pelo FFmpeg integrado.", fontSize = 11.sp)
+                        listOf(
+                            "mp3" to "MP3 • melhor qualidade (V0)",
+                            "m4a" to "M4A • AAC"
+                        ).forEach { (format, label) ->
+                            Row(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                                    .clickable { selectedAudioFormat = format }
+                                    .background(if (selectedAudioFormat == format) DownloadAccentDeep.copy(alpha = .26f) else Color.Transparent)
+                                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = selectedAudioFormat == format,
+                                    onClick = { selectedAudioFormat = format },
+                                    colors = RadioButtonDefaults.colors(selectedColor = DownloadAccent)
+                                )
+                                Text(label, color = Color.White, fontSize = 12.sp)
+                            }
+                        }
+                    } else {
+                        Text(
+                            "O limite escolhido será respeitado. Se a fonte não tiver essa resolução, será usada a melhor disponível abaixo dela.",
+                            fontSize = 11.sp
+                        )
+                        listOf(
+                            2160 to "4K • até 2160p",
+                            1080 to "Full HD • até 1080p",
+                            720 to "HD • até 720p",
+                            480 to "SD • até 480p"
+                        ).forEach { (height, label) ->
+                            Row(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                                    .clickable { selectedVideoHeight = height }
+                                    .background(if (selectedVideoHeight == height) DownloadAccentDeep.copy(alpha = .26f) else Color.Transparent)
+                                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = selectedVideoHeight == height,
+                                    onClick = { selectedVideoHeight = height },
+                                    colors = RadioButtonDefaults.colors(selectedColor = DownloadAccent)
+                                )
+                                Text(label, color = Color.White, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        pendingDownloadChoice = null
+                        startDownload(
+                            item = choice.item,
+                            audioOnly = choice.audioOnly,
+                            videoHeight = selectedVideoHeight,
+                            audioFormat = selectedAudioFormat
+                        )
+                    },
+                    enabled = engineReady,
+                    colors = ButtonDefaults.buttonColors(containerColor = DownloadAccentDeep)
+                ) { Text("Iniciar download") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDownloadChoice = null }) {
+                    Text("Cancelar", color = DownloadMuted)
+                }
+            }
+        )
     }
 }
 
