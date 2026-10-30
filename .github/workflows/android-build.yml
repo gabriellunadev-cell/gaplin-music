@@ -124,6 +124,7 @@ jobs:
           test -d "$ANDROID_HOME/platforms/android-36"
           test -d "$ANDROID_HOME/build-tools/36.0.0"
           grep -q "yt-dlp==2026.10.26" yt-dlp-runtime/build.gradle
+          grep -q "mutagen==1.47.0" yt-dlp-runtime/build.gradle
 
       - name: Install and verify yt-dlp EJS Python package
         run: |
