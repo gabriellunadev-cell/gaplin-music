@@ -341,9 +341,11 @@ class MainActivity : ComponentActivity() {
                 requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                 showFullscreenVideo = true
 
-                val item = MediaItem.Builder()
+                val mediaItemBuilder = MediaItem.Builder()
                     .setMediaId(video.uri.toString())
                     .setUri(video.uri)
+                video.mimeType?.takeIf { it.isNotBlank() }?.let(mediaItemBuilder::setMimeType)
+                val item = mediaItemBuilder
                     .setMediaMetadata(MediaMetadata.Builder().setTitle(video.title).build())
                     .build()
                 player.setMediaItem(item)
@@ -676,7 +678,8 @@ class MainActivity : ComponentActivity() {
                                             durationMs = 0L,
                                             sizeBytes = 0L,
                                             season = null,
-                                            episode = null
+                                            episode = null,
+                                            mimeType = media.mimeType
                                         )
                                         playVideo(video)
                                     }
