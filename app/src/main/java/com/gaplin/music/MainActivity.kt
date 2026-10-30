@@ -660,15 +660,24 @@ class MainActivity : ComponentActivity() {
                                 onLibraryRefresh = ::scanLibrary,
                                 onPlayDownloaded = { media ->
                                     if (media.audioOnly) {
-                                        val track = AudioTrack(
-                                            title = media.title,
-                                            artist = "Gaplin Music",
-                                            uri = media.uri,
-                                            folderPath = "Downloads/Gaplin Music",
-                                            durationMs = 0L,
-                                            mimeType = media.mimeType
-                                        )
-                                        playAudio(track, listOf(track))
+                                        scope.launch {
+                                            val catalogTrack = withContext(Dispatchers.IO) {
+                                                MediaCatalog.scan(
+                                                    context = this@MainActivity,
+                                                    includeAudio = false,
+                                                    includeVideo = false
+                                                ).audio.firstOrNull { it.uri == media.uri }
+                                            }
+                                            val track = catalogTrack ?: AudioTrack(
+                                                title = media.title,
+                                                artist = "Artista desconhecido",
+                                                uri = media.uri,
+                                                folderPath = "Downloads/Gaplin Music",
+                                                durationMs = 0L,
+                                                mimeType = media.mimeType
+                                            )
+                                            playAudio(track, listOf(track))
+                                        }
                                     } else {
                                         val video = VideoEntry(
                                             title = media.title,
