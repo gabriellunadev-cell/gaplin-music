@@ -16,11 +16,20 @@ internal object DownloadExecutionRuntime {
     val active = MutableStateFlow(false)
     val completionVersion = MutableStateFlow(0)
 
-    private val knownRequests = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private enum class RequestState { ACTIVE, COMPLETED }
+    private val requests = java.util.concurrent.ConcurrentHashMap<String, RequestState>()
 
-    fun reserveRequest(key: String): Boolean = knownRequests.add(key)
+    fun reserveRequest(key: String): Boolean =
+        requests.putIfAbsent(key, RequestState.ACTIVE) == null
+
+    fun isCompletedRequest(key: String): Boolean =
+        requests[key] == RequestState.COMPLETED
+
+    fun completeRequest(key: String) {
+        requests[key] = RequestState.COMPLETED
+    }
 
     fun releaseRequest(key: String) {
-        knownRequests.remove(key)
+        requests.remove(key, RequestState.ACTIVE)
     }
 }
