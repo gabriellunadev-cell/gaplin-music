@@ -205,6 +205,8 @@ def _summarize_media_info(info):
             'entry_count': len(valid_entries),
             'availability': str(info.get('availability') or ''),
             'audio_formats': 0,
+            'video_formats': 0,
+            'video_heights': [],
             'progressive_formats': 0,
         }
 
@@ -217,6 +219,14 @@ def _summarize_media_info(info):
         item for item in available
         if item.get('acodec') not in (None, 'none')
     ]
+    video_formats = [
+        item for item in available
+        if item.get('vcodec') not in (None, 'none')
+    ]
+    video_heights = sorted({
+        int(item.get('height')) for item in video_formats
+        if item.get('height') and str(item.get('height')).isdigit()
+    })
     progressive_formats = [
         item for item in available
         if item.get('vcodec') not in (None, 'none')
@@ -230,6 +240,8 @@ def _summarize_media_info(info):
         'entry_count': 1,
         'availability': str(info.get('availability') or ''),
         'audio_formats': len(audio_formats),
+        'video_formats': len(video_formats),
+        'video_heights': video_heights,
         'progressive_formats': len(progressive_formats),
         'format_count': len(available),
     }
