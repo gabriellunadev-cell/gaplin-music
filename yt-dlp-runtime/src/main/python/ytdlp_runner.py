@@ -17,9 +17,9 @@ _FFMPEG_PATH = None
 _FLAG_MAP = {
     '-f': ('format', 'str'), '--format': ('format', 'str'),
     '--merge-output-format': ('merge_output_format', 'str'),
-    '--embed-thumbnail': ('embedthumbnail', 'bool'),
-    '--embed-metadata': ('addmetadata', 'bool'),
-    '--convert-thumbnails': ('convertthumbnails', 'str'),
+    '--embed-thumbnail': ('_embed_thumbnail', 'bool'),
+    '--embed-metadata': ('_embed_metadata', 'bool'),
+    '--convert-thumbnails': ('_convert_thumbnails', 'str'),
     '-x': ('extractaudio', 'bool'), '--extract-audio': ('extractaudio', 'bool'),
     '--audio-format': ('audioformat', 'str'),
     '--audio-quality': ('audioquality', 'str'),
@@ -138,7 +138,59 @@ def _cli_to_opts(cli_flags):
         else:
             opts[key] = value
         i += 2
+    postprocessors = []
+    thumbnail_format = opts.pop('_convert_thumbnails', None)
+    if thumbnail_format:
+        postprocessors.append({
+            'key': 'FFmpegThumbnailsConvertor',
+            'format': thumbnail_format,
+            'when': 'before_dl',
+        })
+
+    if opts.pop('_embed_metadata', False):
+        postprocessors.append({
+            'key': 'FFmpegMetadata',
+            'add_chapters': None,
+            'add_metadata': True,
+            'add_infojson': None,
+        })
+
+    if opts.pop('_embed_thumbnail', False):
+        postprocessors.append({
+            'key': 'EmbedThumbnail',
+            'already_have_thumbnail': False,
+        })
+        opts['writethumbnail'] = True
+        # Match CLI behavior without producing a separate playlist thumbnail.
+        opts['_gaplin_suppress_playlist_thumbnail'] = True
+
+    if postprocessors:
+        opts.setdefault('postprocessors', []).extend(postprocessors)
+
     return opts
+
+
+def _apply_output_template(opts, output_template):
+    suppress_playlist_thumbnail = opts.pop('_gaplin_suppress_playlist_thumbnail', False)
+    if not output_template:
+        if suppress_playlist_thumbnail:
+            current_template = opts.get('outtmpl')
+            if isinstance(current_template, dict):
+                current_template['pl_thumbnail'] = ''
+            elif current_template:
+                opts['outtmpl'] = {
+                    'default': current_template,
+                    'pl_thumbnail': '',
+                }
+        return
+
+    if suppress_playlist_thumbnail:
+        opts['outtmpl'] = {
+            'default': output_template,
+            'pl_thumbnail': '',
+        }
+    else:
+        opts['outtmpl'] = output_template
 
 
 def _progress_hook(progress_callback):
@@ -175,8 +227,7 @@ def get_version():
 
 def execute(url, output_template, cli_flags, progress_callback=None):
     opts = _cli_to_opts(cli_flags)
-    if output_template:
-        opts['outtmpl'] = output_template
+    _apply_output_template(opts, output_template)
     opts['progress_hooks'] = _progress_hook(progress_callback)
     with yt_dlp.YoutubeDL(opts) as downloader:
         return downloader.download([url])
