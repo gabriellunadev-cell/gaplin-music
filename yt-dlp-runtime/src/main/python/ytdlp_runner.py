@@ -235,8 +235,7 @@ def execute(url, output_template, cli_flags, progress_callback=None):
 
 def execute_debug(url, output_template, cli_flags, log_callback=None, progress_callback=None):
     opts = _cli_to_opts(cli_flags)
-    if output_template:
-        opts['outtmpl'] = output_template
+    _apply_output_template(opts, output_template)
     opts['progress_hooks'] = _progress_hook(progress_callback)
     if log_callback is not None:
         class Logger:
