@@ -89,6 +89,9 @@ class YtDlpRunnerOptionsTest(unittest.TestCase):
 
     def test_cover_art_and_metadata_flags_build_real_postprocessors(self):
         opts = self.runner["_cli_to_opts"]([
+            "-x",
+            "--audio-format", "mp3",
+            "--audio-quality", "0",
             "--embed-thumbnail",
             "--embed-metadata",
             "--convert-thumbnails", "jpg",
@@ -98,15 +101,23 @@ class YtDlpRunnerOptionsTest(unittest.TestCase):
         postprocessors = opts["postprocessors"]
         self.assertEqual(
             [item["key"] for item in postprocessors],
-            ["FFmpegThumbnailsConvertor", "FFmpegMetadata", "EmbedThumbnail"],
+            [
+                "FFmpegThumbnailsConvertor",
+                "FFmpegExtractAudio",
+                "FFmpegMetadata",
+                "EmbedThumbnail",
+            ],
         )
         self.assertEqual(postprocessors[0]["format"], "jpg")
         self.assertEqual(postprocessors[0]["when"], "before_dl")
-        self.assertTrue(postprocessors[1]["add_metadata"])
-        self.assertEqual(postprocessors[2]["already_have_thumbnail"], False)
+        self.assertEqual(postprocessors[1]["preferredcodec"], "mp3")
+        self.assertEqual(postprocessors[1]["preferredquality"], "0")
+        self.assertTrue(postprocessors[2]["add_metadata"])
+        self.assertEqual(postprocessors[3]["already_have_thumbnail"], False)
         self.assertNotIn("embedthumbnail", opts)
         self.assertNotIn("addmetadata", opts)
         self.assertNotIn("convertthumbnails", opts)
+        self.assertNotIn("extractaudio", opts)
 
     def test_cover_art_output_template_suppresses_separate_playlist_thumbnail(self):
         opts = self.runner["_cli_to_opts"](["--embed-thumbnail"])
