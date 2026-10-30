@@ -21,6 +21,7 @@ android {
             useLegacyPackaging = true
             keepDebugSymbols += "**/libqjs.so"
             keepDebugSymbols += "**/libffmpeg.so"
+            keepDebugSymbols += "**/libffprobe.so"
         }
     }
     compileOptions {
