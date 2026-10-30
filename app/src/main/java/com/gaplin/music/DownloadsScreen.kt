@@ -761,7 +761,7 @@ private fun DownloadDetail(
                 Text(if (downloading) "Adicionar áudio à fila" else "Escolher MP3 ou M4A")
             }
             Text(
-                "O áudio é salvo no formato original disponível (por exemplo, M4A ou WebM), sem conversão. Qualidade e formatos dependem da fonte.",
+                "O áudio será convertido para o formato escolhido: MP3 ou M4A (AAC). A qualidade final também depende da fonte original.",
                 color = DownloadMuted,
                 fontSize = 10.sp
             )
