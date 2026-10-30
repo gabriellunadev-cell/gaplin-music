@@ -20,9 +20,9 @@ _FLAG_MAP = {
     '--embed-thumbnail': ('_embed_thumbnail', 'bool'),
     '--embed-metadata': ('_embed_metadata', 'bool'),
     '--convert-thumbnails': ('_convert_thumbnails', 'str'),
-    '-x': ('extractaudio', 'bool'), '--extract-audio': ('extractaudio', 'bool'),
-    '--audio-format': ('audioformat', 'str'),
-    '--audio-quality': ('audioquality', 'str'),
+    '-x': ('_extract_audio', 'bool'), '--extract-audio': ('_extract_audio', 'bool'),
+    '--audio-format': ('_audio_format', 'str'),
+    '--audio-quality': ('_audio_quality', 'str'),
     '-o': ('outtmpl', 'str'), '--output': ('outtmpl', 'str'),
     '--cookies': ('cookiefile', 'str'), '--proxy': ('proxy', 'str'),
     '--add-header': ('_header', 'str'), '--user-agent': ('_user_agent', 'str'),
@@ -145,6 +145,14 @@ def _cli_to_opts(cli_flags):
             'key': 'FFmpegThumbnailsConvertor',
             'format': thumbnail_format,
             'when': 'before_dl',
+        })
+
+    if opts.pop('_extract_audio', False):
+        postprocessors.append({
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': opts.pop('_audio_format', None),
+            'preferredquality': opts.pop('_audio_quality', None),
+            'nopostoverwrites': False,
         })
 
     if opts.pop('_embed_metadata', False):
