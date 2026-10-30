@@ -51,8 +51,9 @@ class YtDlpDownloadManager(context: Context) {
     private var ffmpegVersion: String = "não iniciado"
 
     fun engineVersion(): String = runCatching {
-        "yt-dlp ${YtDlp.getVersion()} · QuickJS-NG $quickJsVersion · FFmpeg $ffmpegVersion"
-    }.getOrDefault("desconhecida")
+        val ytDlpVersion = YtDlp.getVersion().substringBefore(" +")
+        "yt-dlp $ytDlpVersion • FFmpeg $ffmpegVersion"
+    }.getOrDefault("motor pronto")
 
     suspend fun initialize() = withContext(Dispatchers.IO) {
         YtDlp.init(appContext)
@@ -80,8 +81,22 @@ class YtDlpDownloadManager(context: Context) {
             throw IllegalStateException("O FFmpeg nativo não passou na verificação de inicialização.")
         }
         val encoders = runNativeTool(ffmpeg, "-hide_banner", "-encoders")
-        if (!encoders.contains("libmp3lame")) {
+        if (!FfmpegRuntimePolicy.supportsComponent(encoders, "libmp3lame")) {
             throw IllegalStateException("O FFmpeg incluído não oferece o codificador MP3 libmp3lame.")
+        }
+        val decoders = runNativeTool(ffmpeg, "-hide_banner", "-decoders")
+        val imageDemuxers = runNativeTool(ffmpeg, "-hide_banner", "-demuxers")
+        val imageEncoders = listOf("mjpeg", "png")
+        val imageDecoders = listOf("mjpeg", "png", "webp")
+        val missingImageSupport =
+            imageEncoders.filterNot { FfmpegRuntimePolicy.supportsComponent(encoders, it) } +
+                imageDecoders.filterNot { FfmpegRuntimePolicy.supportsComponent(decoders, it) } +
+                listOf("image2").filterNot { FfmpegRuntimePolicy.supportsComponent(imageDemuxers, it) }
+        if (missingImageSupport.isNotEmpty()) {
+            throw IllegalStateException(
+                "O FFmpeg não tem os codecs de imagem necessários para incorporar capas: " +
+                    missingImageSupport.distinct().joinToString(", ") + "."
+            )
         }
         val ffprobe = File(ffmpeg.parentFile, "libffprobe.so")
         if (!ffprobe.isFile || !ffprobe.canExecute()) {
@@ -95,8 +110,14 @@ class YtDlpDownloadManager(context: Context) {
         if (!FfmpegRuntimePolicy.supportsMuxer(muxers, "mp4")) {
             throw IllegalStateException("O FFmpeg incluído não oferece o contêiner MP4.")
         }
+        if (!FfmpegRuntimePolicy.supportsMuxer(muxers, "image2")) {
+            throw IllegalStateException("O FFmpeg incluído não consegue gerar imagens de capa.")
+        }
         ffmpegVersion = ffmpegVersionOutput.lineSequence().firstOrNull().orEmpty()
-            .substringAfter("ffmpeg version", "nativo").trim().take(36)
+            .substringAfter("ffmpeg version", "nativo")
+            .substringBefore(" Copyright")
+            .substringBefore(" built")
+            .trim().take(18)
         YtDlp.configureFfmpegRuntime(ffmpeg.absolutePath)
     }
 
@@ -402,7 +423,7 @@ class YtDlpDownloadManager(context: Context) {
 
             val completedFiles = jobDirectory.listFiles()
                 .orEmpty()
-                .filter { it.isFile && !it.name.endsWith(".part", true) }
+                .filter { file -> file.isFile && isMediaOutputFile(file, audioOnly) }
                 .sortedBy { it.name }
                 .map { file ->
                     // Give audio-only WebM the audio-specific .weba extension.
@@ -576,6 +597,13 @@ class YtDlpDownloadManager(context: Context) {
 
     private fun safePathPart(value: String): String =
         value.replace(Regex("[^A-Za-z0-9._-]"), "_").take(80).ifBlank { "media" }
+
+    private fun isMediaOutputFile(file: File, audioOnly: Boolean): Boolean {
+        val extension = file.extension.lowercase(Locale.ROOT)
+        val audioExtensions = setOf("mp3", "m4a", "aac", "flac", "wav", "ogg", "opus", "weba", "webm")
+        val videoExtensions = setOf("mp4", "m4v", "mkv", "webm", "3gp", "mpeg", "mpg")
+        return if (audioOnly) extension in audioExtensions else extension in videoExtensions
+    }
 
     private fun mimeFromName(name: String): String {
         val extension = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
