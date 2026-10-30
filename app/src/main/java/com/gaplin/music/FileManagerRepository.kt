@@ -4,9 +4,11 @@ import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.MediaStore
 import android.webkit.MimeTypeMap
 import androidx.documentfile.provider.DocumentFile
+import java.io.File
 import java.security.MessageDigest
 
 enum class ManagedMediaKind(val label: String) {
@@ -83,6 +85,7 @@ object FileManagerRepository {
                 null
             )
         }
+        result += scanGaplinDownloads(context)
         if (treeUri != null) result += scanSafTree(context, treeUri)
         return result.distinctBy { it.stableId }
             .distinctBy { file ->
@@ -91,6 +94,81 @@ object FileManagerRepository {
                 "${file.kind.name}|${normalizedFolder.lowercase()}|${file.name.lowercase()}"
             }
             .sortedWith(compareBy<ManagedMediaFile> { it.kind.ordinal }.thenBy { it.name.lowercase() })
+    }
+
+    private fun scanGaplinDownloads(context: Context): List<ManagedMediaFile> {
+        val relativePath = "${Environment.DIRECTORY_DOWNLOADS}/Gaplin Music/"
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            val directory = File(
+                context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir,
+                "Gaplin Music"
+            )
+            return directory.listFiles().orEmpty()
+                .filter { it.isFile }
+                .mapNotNull { file ->
+                    val kind = kindForExtension(file.extension.lowercase()) ?: return@mapNotNull null
+                    ManagedMediaFile(
+                        uri = Uri.fromFile(file),
+                        name = file.name,
+                        folderPath = "Downloads/Gaplin Music",
+                        mimeType = mimeFromName(file.name, kind),
+                        sizeBytes = file.length().coerceAtLeast(0L),
+                        modifiedSeconds = file.lastModified() / 1000L,
+                        kind = kind,
+                        isSaf = false
+                    )
+                }
+        }
+
+        val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.MIME_TYPE,
+            MediaStore.MediaColumns.SIZE,
+            MediaStore.MediaColumns.DATE_MODIFIED,
+            MediaStore.MediaColumns.RELATIVE_PATH
+        )
+        val result = mutableListOf<ManagedMediaFile>()
+        context.contentResolver.query(
+            collection,
+            projection,
+            "${MediaStore.MediaColumns.RELATIVE_PATH}=?",
+            arrayOf(relativePath),
+            "${MediaStore.MediaColumns.DATE_ADDED} DESC"
+        )?.use { cursor ->
+            val idIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+            val nameIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+            val mimeIndex = cursor.getColumnIndex(MediaStore.MediaColumns.MIME_TYPE)
+            val sizeIndex = cursor.getColumnIndex(MediaStore.MediaColumns.SIZE)
+            val modifiedIndex = cursor.getColumnIndex(MediaStore.MediaColumns.DATE_MODIFIED)
+            val pathIndex = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
+
+            while (cursor.moveToNext()) {
+                val name = cursor.getString(nameIndex)?.takeIf(String::isNotBlank) ?: continue
+                val rawMime = if (mimeIndex >= 0) cursor.getString(mimeIndex).orEmpty() else ""
+                val kind = kindForExtension(name.substringAfterLast('.', "").lowercase())
+                    ?: when {
+                        rawMime.startsWith("audio/") -> ManagedMediaKind.AUDIO
+                        rawMime.startsWith("video/") -> ManagedMediaKind.VIDEO
+                        rawMime.startsWith("image/") -> ManagedMediaKind.IMAGE
+                        else -> null
+                    } ?: continue
+                result += ManagedMediaFile(
+                    uri = ContentUris.withAppendedId(collection, cursor.getLong(idIndex)),
+                    name = name,
+                    folderPath = if (pathIndex >= 0) {
+                        cursor.getString(pathIndex).orEmpty().trimEnd('/')
+                    } else relativePath.trimEnd('/'),
+                    mimeType = rawMime.ifBlank { mimeFromName(name, kind) },
+                    sizeBytes = if (sizeIndex >= 0) cursor.getLong(sizeIndex).coerceAtLeast(0L) else 0L,
+                    modifiedSeconds = if (modifiedIndex >= 0) cursor.getLong(modifiedIndex) else 0L,
+                    kind = kind,
+                    isSaf = false
+                )
+            }
+        }
+        return result
     }
 
     @Suppress("DEPRECATION")
