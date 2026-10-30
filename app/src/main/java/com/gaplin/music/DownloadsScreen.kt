@@ -275,7 +275,8 @@ fun DownloadsScreen(
                             }
                         }
                     )
-                    downloaded = manager.listDownloaded()
+                    runCatching { manager.listDownloaded() }
+                        .onSuccess { downloaded = it }
                     DownloadExecutionRuntime.completionVersion.value += 1
                     val index = tasks.indexOfFirst { it.id == taskId }
                     if (index >= 0) {
@@ -290,7 +291,7 @@ fun DownloadsScreen(
                     } else {
                         files.size.toString() + " arquivos adicionados à pasta Downloads/Gaplin Music."
                     }
-                    onLibraryRefresh()
+                    runCatching { onLibraryRefresh() }
                 } catch (error: Exception) {
                     DownloadExecutionRuntime.releaseRequest(requestKey)
                     val message = error.message ?: "Falha ao baixar esta mídia."
