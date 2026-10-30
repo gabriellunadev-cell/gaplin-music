@@ -12,9 +12,13 @@ import yt_dlp
 from yt_dlp.version import __version__ as YT_DLP_VERSION
 
 _JS_RUNTIME_PATH = None
+_FFMPEG_PATH = None
 
 _FLAG_MAP = {
     '-f': ('format', 'str'), '--format': ('format', 'str'),
+    '-x': ('extractaudio', 'bool'), '--extract-audio': ('extractaudio', 'bool'),
+    '--audio-format': ('audioformat', 'str'),
+    '--audio-quality': ('audioquality', 'str'),
     '-o': ('outtmpl', 'str'), '--output': ('outtmpl', 'str'),
     '--cookies': ('cookiefile', 'str'), '--proxy': ('proxy', 'str'),
     '--add-header': ('_header', 'str'), '--user-agent': ('_user_agent', 'str'),
@@ -58,6 +62,16 @@ def configure_js_runtime(executable_path, temp_directory):
     return path
 
 
+def configure_ffmpeg_runtime(executable_path):
+    """Use the verified Android FFmpeg executable for yt-dlp merging and extraction."""
+    global _FFMPEG_PATH
+    path = os.path.abspath(str(executable_path))
+    if not os.path.isfile(path) or not os.access(path, os.X_OK):
+        raise RuntimeError("The packaged FFmpeg runtime is missing or not executable")
+    _FFMPEG_PATH = path
+    return path
+
+
 def _parse_extractor_args(value):
     """Convert one CLI extractor-args value to yt-dlp's nested API structure."""
     ie_key, separator, raw_args = str(value).partition(':')
@@ -81,6 +95,10 @@ def _cli_to_opts(cli_flags):
         opts['js_runtimes'] = {'quickjs': {'path': _JS_RUNTIME_PATH}}
     else:
         raise RuntimeError('No supported JavaScript runtime is configured for YouTube extraction')
+    if _FFMPEG_PATH:
+        opts['ffmpeg_location'] = _FFMPEG_PATH
+    else:
+        raise RuntimeError('The packaged FFmpeg runtime is not configured')
     flags = list(cli_flags or [])
     i = 0
     while i < len(flags):
