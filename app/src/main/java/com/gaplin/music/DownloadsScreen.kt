@@ -221,7 +221,11 @@ fun DownloadsScreen(
             "${item.url}|video|$videoHeight"
         }
         if (!DownloadExecutionRuntime.reserveRequest(requestKey)) {
-            downloadMessage = "Este conteúdo já está em processamento em outra aba."
+            downloadMessage = if (DownloadExecutionRuntime.isCompletedRequest(requestKey)) {
+                "Este conteúdo já foi baixado nesta sessão."
+            } else {
+                "Este conteúdo já está em processamento em outra aba."
+            }
             selectedSection = "Fila"
             return
         }
@@ -281,6 +285,7 @@ fun DownloadsScreen(
                     )
                     runCatching { manager.listDownloaded() }
                         .onSuccess { downloaded = it }
+                    DownloadExecutionRuntime.completeRequest(requestKey)
                     DownloadExecutionRuntime.completionVersion.value += 1
                     val index = tasks.indexOfFirst { it.id == taskId }
                     if (index >= 0) {
