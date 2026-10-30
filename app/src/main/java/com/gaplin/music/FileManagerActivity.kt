@@ -334,7 +334,8 @@ class FileManagerActivity : ComponentActivity() {
     private fun deleteFiles(files: List<ManagedMediaFile>) {
         if (files.isEmpty()) return
         val safFiles = files.filter { it.isSaf }
-        val mediaStoreUris = files.filterNot { it.isSaf }.map { it.uri }
+        val privateFiles = files.filter { it.isPrivateDownload }
+        val mediaStoreUris = files.filterNot { it.isSaf || it.isPrivateDownload }.map { it.uri }
 
         if (safFiles.isNotEmpty() && !hasWriteAccessToSelectedTree()) {
             statusMessage = "Para excluir arquivos da pasta escolhida, é necessário vinculá-la novamente com permissão de edição. Use “Conectar pasta” e escolha a mesma pasta."
@@ -343,24 +344,30 @@ class FileManagerActivity : ComponentActivity() {
 
         if (mediaStoreUris.isEmpty()) {
             lifecycleScope.launch {
+                val deletedPrivate = withContext(Dispatchers.IO) {
+                    privateFiles.filter { FileManagerRepository.deletePrivateDownload(it.uri) }.map { it.uri }
+                }
                 val deletedSaf = withContext(Dispatchers.IO) {
                     safFiles.filter { FileManagerRepository.deleteSafDocument(this@FileManagerActivity, it.uri) }
                         .map { it.uri }
                 }
-                cleanupLocalReferences(deletedSaf)
-                statusMessage = "${deletedSaf.size} arquivo(s) removido(s) da pasta selecionada."
+                cleanupLocalReferences(deletedPrivate + deletedSaf)
+                statusMessage = "${deletedPrivate.size} download(s) privado(s) e ${deletedSaf.size} arquivo(s) da pasta selecionada removidos."
                 scanFiles()
             }
         } else {
             // Ask Android to authorize MediaStore deletion before removing any SAF originals.
             requestMediaStoreDelete(mediaStoreUris) {
                 lifecycleScope.launch {
+                    val deletedPrivate = withContext(Dispatchers.IO) {
+                        privateFiles.filter { FileManagerRepository.deletePrivateDownload(it.uri) }.map { it.uri }
+                    }
                     val deletedSaf = withContext(Dispatchers.IO) {
                         safFiles.filter { FileManagerRepository.deleteSafDocument(this@FileManagerActivity, it.uri) }
                             .map { it.uri }
                     }
-                    cleanupLocalReferences(deletedSaf + mediaStoreUris)
-                    statusMessage = "Exclusão concluída. ${deletedSaf.size} arquivo(s) SAF removido(s)."
+                    cleanupLocalReferences(deletedPrivate + deletedSaf + mediaStoreUris)
+                    statusMessage = "Exclusão concluída. ${deletedPrivate.size} download(s) privado(s) e ${deletedSaf.size} arquivo(s) SAF removidos."
                     scanFiles()
                 }
             }
@@ -388,25 +395,32 @@ class FileManagerActivity : ComponentActivity() {
             }
 
             val safSources = copyResult.copied.filter { it.isSaf }
-            val mediaSources = copyResult.copied.filterNot { it.isSaf }.map { it.uri }
+            val privateSources = copyResult.copied.filter { it.isPrivateDownload }
+            val mediaSources = copyResult.copied.filterNot { it.isSaf || it.isPrivateDownload }.map { it.uri }
 
             suspend fun removeSafSources(): List<Uri> = withContext(Dispatchers.IO) {
                 safSources.filter { FileManagerRepository.deleteSafDocument(this@FileManagerActivity, it.uri) }
                     .map { it.uri }
             }
+            suspend fun removePrivateSources(): List<Uri> = withContext(Dispatchers.IO) {
+                privateSources.filter { FileManagerRepository.deletePrivateDownload(it.uri) }
+                    .map { it.uri }
+            }
 
             val summary = "Copiados: ${copyResult.copied.size}; falharam: ${copyResult.failed.size}."
             if (mediaSources.isEmpty()) {
+                val deletedPrivate = removePrivateSources()
                 val deletedSaf = removeSafSources()
-                cleanupLocalReferences(deletedSaf)
-                statusMessage = "$summary Origens SAF removidas: ${deletedSaf.size}."
+                cleanupLocalReferences(deletedPrivate + deletedSaf)
+                statusMessage = "$summary Downloads privados removidos: ${deletedPrivate.size}; origens SAF removidas: ${deletedSaf.size}."
                 scanFiles()
             } else {
                 requestMediaStoreDelete(mediaSources, isMove = true) {
                     lifecycleScope.launch {
+                        val deletedPrivate = removePrivateSources()
                         val deletedSaf = removeSafSources()
-                        cleanupLocalReferences(deletedSaf + mediaSources)
-                        statusMessage = "$summary Origens SAF removidas: ${deletedSaf.size}. Os originais da biblioteca Android foram excluídos após sua autorização."
+                        cleanupLocalReferences(deletedPrivate + deletedSaf + mediaSources)
+                        statusMessage = "$summary Downloads privados removidos: ${deletedPrivate.size}; origens SAF removidas: ${deletedSaf.size}. Os originais da biblioteca Android foram excluídos após sua autorização."
                         scanFiles()
                     }
                 }
