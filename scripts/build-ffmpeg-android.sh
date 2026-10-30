@@ -102,10 +102,10 @@ PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" ./configure \
   --enable-ffmpeg \
   --enable-ffprobe \
   --enable-protocol=file,pipe \
-  --enable-demuxer=aac,flac,matroska,mov,mp3,ogg,wav \
-  --enable-muxer=ipod,matroska,mp3,mov,mp4,ogg,opus,wav,webm \
-  --enable-decoder=aac,flac,mp3,opus,vorbis,pcm_s16le \
-  --enable-encoder=aac,libmp3lame \
+  --enable-demuxer=aac,flac,image2,matroska,mov,mp3,ogg,wav,webp \
+  --enable-muxer=image2,ipod,matroska,mp3,mov,mp4,ogg,opus,wav,webm \
+  --enable-decoder=aac,flac,mjpeg,mp3,opus,png,vorbis,pcm_s16le,webp \
+  --enable-encoder=aac,libmp3lame,mjpeg,png \
   --enable-parser=aac,flac,mpegaudio,opus,vorbis \
   --enable-libmp3lame \
   --pkg-config-flags="--static" \
@@ -118,6 +118,13 @@ grep -Rqs '^CONFIG_FFPROBE=yes' ffbuild/config.mak
 grep -Rqs '^CONFIG_LIBMP3LAME_ENCODER=yes' ffbuild/config.mak
 grep -Rqs '^CONFIG_MOV_MUXER=yes' ffbuild/config.mak
 grep -Rqs '^CONFIG_MP4_MUXER=yes' ffbuild/config.mak
+grep -Rqs '^CONFIG_IMAGE2_DEMUXER=yes' ffbuild/config.mak
+grep -Rqs '^CONFIG_IMAGE2_MUXER=yes' ffbuild/config.mak
+grep -Rqs '^CONFIG_MJPEG_DECODER=yes' ffbuild/config.mak
+grep -Rqs '^CONFIG_PNG_DECODER=yes' ffbuild/config.mak
+grep -Rqs '^CONFIG_WEBP_DECODER=yes' ffbuild/config.mak
+grep -Rqs '^CONFIG_MJPEG_ENCODER=yes' ffbuild/config.mak
+grep -Rqs '^CONFIG_PNG_ENCODER=yes' ffbuild/config.mak
 
 make -j2
 make install
