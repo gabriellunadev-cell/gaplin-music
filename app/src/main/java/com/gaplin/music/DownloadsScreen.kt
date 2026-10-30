@@ -292,6 +292,7 @@ fun DownloadsScreen(
                     }
                     onLibraryRefresh()
                 } catch (error: Exception) {
+                    DownloadExecutionRuntime.releaseRequest(requestKey)
                     val message = error.message ?: "Falha ao baixar esta mídia."
                     val index = tasks.indexOfFirst { it.id == taskId }
                     if (index >= 0) {
