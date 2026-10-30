@@ -3,6 +3,8 @@ package com.gaplin.music
 import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
+import android.media.MediaMetadataRetriever
+import java.io.File
 import androidx.documentfile.provider.DocumentFile
 import android.os.Build
 import android.provider.MediaStore
