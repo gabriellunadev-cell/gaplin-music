@@ -368,11 +368,16 @@ object FileManagerRepository {
         return "$base ($suffix)$extension"
     }
 
-    fun deletePrivateDownload(uri: Uri): Boolean {
+    fun deletePrivateDownload(context: Context, uri: Uri): Boolean {
         if (!uri.scheme.equals("file", ignoreCase = true)) return false
-        val path = uri.path ?: return false
-        val file = File(path)
-        return file.isFile && runCatching { file.delete() }.getOrDefault(false)
+        return runCatching {
+            val downloadsDirectory = File(
+                context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir,
+                "Gaplin Music"
+            ).canonicalFile
+            val file = File(uri.path ?: return false).canonicalFile
+            file.parentFile == downloadsDirectory && file.isFile && file.delete()
+        }.getOrDefault(false)
     }
 
     fun deleteSafDocument(context: Context, uri: Uri): Boolean {
