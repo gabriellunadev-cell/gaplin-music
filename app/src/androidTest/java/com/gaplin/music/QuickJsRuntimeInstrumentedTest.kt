@@ -17,9 +17,10 @@ class QuickJsRuntimeInstrumentedTest {
         manager.initialize()
 
         val engine = manager.engineVersion()
-        assertTrue("The embedded yt-dlp-ejs package is missing: $engine", engine.contains("yt-dlp-ejs 0.8.0"))
+        val pythonPackages = YtDlp.getVersion()
         assertTrue("The packaged QuickJS Android executable did not start: $engine", engine.contains("QuickJS-NG"))
         assertTrue("The packaged FFmpeg executable did not start: $engine", engine.contains("FFmpeg"))
-        assertTrue("The yt-dlp-ejs dependency is missing: $engine", engine.contains("yt-dlp-ejs 0.8.0"))
+        assertTrue("The embedded yt-dlp-ejs package is missing: $pythonPackages", pythonPackages.contains("yt-dlp-ejs 0.8.0"))
+        assertTrue("The Mutagen cover-art library is missing: $pythonPackages", pythonPackages.contains("mutagen 1.47.0"))
     }
 }
