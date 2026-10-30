@@ -345,7 +345,7 @@ class FileManagerActivity : ComponentActivity() {
         if (mediaStoreUris.isEmpty()) {
             lifecycleScope.launch {
                 val deletedPrivate = withContext(Dispatchers.IO) {
-                    privateFiles.filter { FileManagerRepository.deletePrivateDownload(it.uri) }.map { it.uri }
+                    privateFiles.filter { FileManagerRepository.deletePrivateDownload(this@FileManagerActivity, it.uri) }.map { it.uri }
                 }
                 val deletedSaf = withContext(Dispatchers.IO) {
                     safFiles.filter { FileManagerRepository.deleteSafDocument(this@FileManagerActivity, it.uri) }
@@ -360,7 +360,7 @@ class FileManagerActivity : ComponentActivity() {
             requestMediaStoreDelete(mediaStoreUris) {
                 lifecycleScope.launch {
                     val deletedPrivate = withContext(Dispatchers.IO) {
-                        privateFiles.filter { FileManagerRepository.deletePrivateDownload(it.uri) }.map { it.uri }
+                        privateFiles.filter { FileManagerRepository.deletePrivateDownload(this@FileManagerActivity, it.uri) }.map { it.uri }
                     }
                     val deletedSaf = withContext(Dispatchers.IO) {
                         safFiles.filter { FileManagerRepository.deleteSafDocument(this@FileManagerActivity, it.uri) }
@@ -403,7 +403,7 @@ class FileManagerActivity : ComponentActivity() {
                     .map { it.uri }
             }
             suspend fun removePrivateSources(): List<Uri> = withContext(Dispatchers.IO) {
-                privateSources.filter { FileManagerRepository.deletePrivateDownload(it.uri) }
+                privateSources.filter { FileManagerRepository.deletePrivateDownload(this@FileManagerActivity, it.uri) }
                     .map { it.uri }
             }
 
