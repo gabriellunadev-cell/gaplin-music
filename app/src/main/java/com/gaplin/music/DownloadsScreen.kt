@@ -747,7 +747,7 @@ private fun DownloadDetail(
             ) {
                 Icon(Icons.Default.Download, null)
                 Spacer(Modifier.width(8.dp))
-                Text(if (downloading) "Adicionar à fila" else if (item.kind == RemoteMediaKind.PLAYLIST) "Baixar playlist" else "Baixar vídeo", fontWeight = FontWeight.Bold)
+                Text(if (downloading) "Adicionar à fila" else if (item.kind == RemoteMediaKind.PLAYLIST) "Baixar playlist • escolher qualidade" else "Escolher qualidade do vídeo", fontWeight = FontWeight.Bold)
             }
             OutlinedButton(
                 onClick = onDownloadAudio,
@@ -758,7 +758,7 @@ private fun DownloadDetail(
             ) {
                 Icon(Icons.Default.Headphones, null)
                 Spacer(Modifier.width(8.dp))
-                Text(if (downloading) "Adicionar áudio à fila" else "Baixar somente áudio")
+                Text(if (downloading) "Adicionar áudio à fila" else "Escolher MP3 ou M4A")
             }
             Text(
                 "O áudio é salvo no formato original disponível (por exemplo, M4A ou WebM), sem conversão. Qualidade e formatos dependem da fonte.",
@@ -795,7 +795,15 @@ private fun DownloadTaskCard(task: DownloadUiTask, onRetry: () -> Unit) {
             )
             Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                 Text(task.title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(if (task.audioOnly) "Somente áudio" else "Vídeo", color = DownloadMuted, fontSize = 10.sp)
+                Text(
+                    when {
+                        task.audioOnly && task.audioFormat == "mp3" -> "Áudio • MP3 V0"
+                        task.audioOnly -> "Áudio • M4A"
+                        else -> "Vídeo • até ${task.videoHeight}p"
+                    },
+                    color = DownloadMuted,
+                    fontSize = 10.sp
+                )
             }
             Text(task.status, color = if (task.status == "Falhou") DownloadPink else DownloadMuted, fontSize = 10.sp)
         }
