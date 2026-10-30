@@ -6,6 +6,12 @@ import org.junit.Test
 
 class DownloadFormatPolicyTest {
     @Test
+    fun videoMergeUsesARealSingleContainerName() {
+        assertEquals("mp4", DownloadFormatPolicy.videoMergeContainer)
+        assertTrue(!DownloadFormatPolicy.videoMergeContainer.contains("/"))
+    }
+
+    @Test
     fun audioSelectionUsesAudioOnlyStreams() {
         assertEquals("bestaudio", DownloadFormatPolicy.selector(audioOnly = true))
     }
