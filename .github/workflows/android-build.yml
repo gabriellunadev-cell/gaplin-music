@@ -58,7 +58,7 @@ jobs:
       - name: Install FFmpeg cross-compilation dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y autoconf automake build-essential curl git libtool pkg-config texinfo yasm nasm
+          sudo apt-get install -y autoconf automake build-essential curl git libtool pkg-config texinfo yasm nasm zlib1g-dev
 
       - name: Build FFmpeg and MP3 encoder for Android ABIs
         env:
