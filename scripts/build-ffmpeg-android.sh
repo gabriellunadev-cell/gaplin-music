@@ -89,8 +89,8 @@ PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" ./configure \
   --enable-gpl \
   --enable-libmp3lame \
   --enable-ffmpeg \
+  --enable-ffprobe \
   --disable-ffplay \
-  --disable-ffprobe \
   --disable-doc \
   --disable-debug \
   --disable-network \
@@ -100,7 +100,7 @@ PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" ./configure \
   --disable-everything \
   --enable-ffmpeg \
   --enable-protocol=file,pipe \
-  --enable-demuxer=aac,flac,matroska,mov,mp3,ogg,wav,webm \
+  --enable-demuxer=aac,flac,matroska,mov,mp3,ogg,wav \
   --enable-muxer=ipod,matroska,mp3,mp4,ogg,opus,wav,webm \
   --enable-decoder=aac,flac,mp3,opus,vorbis,pcm_s16le \
   --enable-encoder=aac,libmp3lame \
@@ -114,9 +114,13 @@ PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" ./configure \
 make -j2
 make install
 install -D -m 0755 "$PREFIX/bin/ffmpeg" "$OUT"
-"$STRIP" "$OUT"
+PROBE_OUT="yt-dlp-runtime/src/main/jniLibs/${ABI}/libffprobe.so"
+install -m 0755 "$PREFIX/bin/ffprobe" "$PROBE_OUT"
+"$STRIP" "$OUT" "$PROBE_OUT"
 "$READELF" -h "$OUT" | grep -E "Class:.*ELF64|Machine:"
+"$READELF" -h "$PROBE_OUT" | grep -E "Class:.*ELF64|Machine:"
 "$OUT" -version | head -n 2
 "$OUT" -hide_banner -encoders 2>/dev/null | grep -q "libmp3lame"
 "$OUT" -hide_banner -muxers 2>/dev/null | grep -q "mp4"
-echo "FFmpeg + libmp3lame ready: $OUT ($(stat -c%s "$OUT") bytes)"
+"$PROBE_OUT" -version | head -n 2
+echo "FFmpeg + FFprobe + libmp3lame ready: $OUT ($(stat -c%s "$OUT") bytes), $(stat -c%s "$PROBE_OUT") bytes"
