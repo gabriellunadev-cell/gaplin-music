@@ -103,7 +103,7 @@ PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" ./configure \
   --enable-ffprobe \
   --enable-protocol=file,pipe \
   --enable-demuxer=aac,flac,matroska,mov,mp3,ogg,wav \
-  --enable-muxer=ipod,matroska,mp3,mov,ogg,opus,wav,webm \
+  --enable-muxer=ipod,matroska,mp3,mov,mp4,ogg,opus,wav,webm \
   --enable-decoder=aac,flac,mp3,opus,vorbis,pcm_s16le \
   --enable-encoder=aac,libmp3lame \
   --enable-parser=aac,flac,mpegaudio,opus,vorbis \
@@ -117,6 +117,7 @@ PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" ./configure \
 grep -Rqs '^CONFIG_FFPROBE=yes' ffbuild/config.mak
 grep -Rqs '^CONFIG_LIBMP3LAME_ENCODER=yes' ffbuild/config.mak
 grep -Rqs '^CONFIG_MOV_MUXER=yes' ffbuild/config.mak
+grep -Rqs '^CONFIG_MP4_MUXER=yes' ffbuild/config.mak
 
 make -j2
 make install
