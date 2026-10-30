@@ -537,8 +537,11 @@ fun DownloadsScreen(
             selectedSection == "Fila" -> {
                 if (tasks.isEmpty()) {
                     EmptyDownloadState(
-                        title = "Sua fila está vazia",
-                        message = "Quando iniciar um download, o progresso aparecerá nesta tela.",
+                        title = if (downloadInProgress) "Download em andamento" else "Sua fila está vazia",
+                        message = if (downloadInProgress)
+                            "A transferência continua ativa enquanto você navega pelo aplicativo. O arquivo aparecerá em Concluídos ao terminar."
+                        else
+                            "Quando iniciar um download, o progresso aparecerá nesta tela.",
                         icon = Icons.Default.CloudDownload
                     )
                 } else {
