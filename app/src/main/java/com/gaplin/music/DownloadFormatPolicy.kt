@@ -1,14 +1,31 @@
 package com.gaplin.music
 
 /**
- * Select formats that the current APK can save without transcoding or merging.
- * Audio mode must never fall back to a video container.
- * Video mode requires a single progressive stream containing both tracks.
+ * yt-dlp format selectors backed by the packaged FFmpeg executable.
+ * A video height is an upper bound; yt-dlp picks the best available stream
+ * not exceeding it, then FFmpeg muxes video and audio into one playable file.
  */
 internal object DownloadFormatPolicy {
-    fun selector(audioOnly: Boolean): String = if (audioOnly) {
-        "bestaudio"
-    } else {
-        "best[height<=720][vcodec!=none][acodec!=none]/best[vcodec!=none][acodec!=none]"
+    val videoHeights = listOf(2160, 1080, 720, 480)
+
+    val audioFormats = listOf(
+        "mp3" to "MP3",
+        "m4a" to "M4A (AAC)"
+    )
+
+    fun selector(audioOnly: Boolean, videoHeight: Int = 1080): String {
+        return if (audioOnly) {
+            "bestaudio"
+        } else {
+            val height = videoHeight.coerceIn(144, 4320)
+            "bestvideo[height<=${height}]+bestaudio/best[height<=${height}]"
+        }
+    }
+
+    fun validateAudioFormat(format: String): String {
+        require(audioFormats.any { it.first == format }) {
+            "Formato de áudio não suportado: $format"
+        }
+        return format
     }
 }
