@@ -602,7 +602,7 @@ class YtDlpDownloadManager(context: Context) {
     private fun isMediaOutputFile(file: File, audioOnly: Boolean): Boolean {
         val extension = file.extension.lowercase(Locale.ROOT)
         val audioExtensions = setOf("mp3", "m4a", "aac", "flac", "wav", "ogg", "opus", "weba", "webm")
-        val videoExtensions = setOf("mp4", "m4v", "mkv", "webm", "3gp", "mpeg", "mpg")
+        val videoExtensions = setOf("mp4", "m4v", "mkv", "webm", "3gp", "mpeg", "mpg", "avi", "mov")
         return if (audioOnly) extension in audioExtensions else extension in videoExtensions
     }
 
