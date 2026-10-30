@@ -90,10 +90,10 @@ fun DownloadsScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var selectedSource by rememberSaveable { mutableStateOf("Pesquisar") }
     var selectedSection by rememberSaveable { mutableStateOf("Pesquisar") }
-    var selectedResult by remember { mutableStateOf<RemoteMediaResult?>(null)
+    var selectedResult by remember { mutableStateOf<RemoteMediaResult?>(null) }
     var pendingDownloadChoice by remember { mutableStateOf<PendingDownloadChoice?>(null) }
     var selectedVideoHeight by rememberSaveable { mutableIntStateOf(1080) }
-    var selectedAudioFormat by rememberSaveable { mutableStateOf("mp3") } }
+    var selectedAudioFormat by rememberSaveable { mutableStateOf("mp3") }
     var results by remember { mutableStateOf<List<RemoteMediaResult>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
     var searchError by remember { mutableStateOf<String?>(null) }
