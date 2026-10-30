@@ -3,9 +3,13 @@ package com.gaplin.music
 import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
-import androidx.documentfile.provider.DocumentFile
+import android.media.MediaMetadataRetriever
 import android.os.Build
+import android.os.Environment
 import android.provider.MediaStore
+import android.webkit.MimeTypeMap
+import androidx.documentfile.provider.DocumentFile
+import java.io.File
 
 data class AudioTrack(
     val title: String,
@@ -15,7 +19,9 @@ data class AudioTrack(
     val durationMs: Long,
     val album: String = "Álbum desconhecido",
     val albumId: Long = -1L,
-    val artworkUri: Uri? = null
+    val artworkUri: Uri? = null,
+    val mimeType: String? = null,
+    val dateAddedEpochSeconds: Long = 0L
 )
 
 data class VideoEntry(
@@ -26,7 +32,8 @@ data class VideoEntry(
     val durationMs: Long,
     val sizeBytes: Long,
     val season: Int?,
-    val episode: Int?
+    val episode: Int?,
+    val mimeType: String? = null
 ) {
     val seriesName: String
         get() = title
@@ -36,6 +43,13 @@ data class VideoEntry(
             .trim()
             .ifBlank { folderName }
 }
+
+private data class EmbeddedAudioMetadata(
+    val title: String?,
+    val artist: String?,
+    val album: String?,
+    val artworkUri: Uri?
+)
 
 data class MediaSnapshot(
     val audio: List<AudioTrack>,
@@ -57,8 +71,15 @@ object MediaCatalog {
         includeVideo: Boolean = true
     ): MediaSnapshot {
         return MediaSnapshot(
-            audio = if (includeAudio) scanAudio(context) else emptyList(),
-            videos = if (includeVideo) scanVideos(context) else emptyList()
+            audio = (
+                (if (includeAudio) scanAudio(context) else emptyList()) +
+                    scanGaplinDownloadsAudio(context)
+            ).distinctBy { "${it.uri.authority}:${it.uri.lastPathSegment}" }
+                .sortedWith(compareByDescending<AudioTrack> { it.dateAddedEpochSeconds }.thenBy { it.title.lowercase() }),
+            videos = (
+                (if (includeVideo) scanVideos(context) else emptyList()) +
+                    scanGaplinDownloadsVideos(context)
+            ).distinctBy { "${it.folderPath.lowercase()}|${it.title.lowercase()}|${it.mimeType.orEmpty().lowercase()}" }
         )
     }
 
@@ -72,16 +93,21 @@ object MediaCatalog {
             MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.ALBUM_ID,
-            MediaStore.Audio.Media.DURATION
+            MediaStore.Audio.Media.DURATION,
+            MediaStore.MediaColumns.DATE_ADDED,
+            MediaStore.MediaColumns.MIME_TYPE
         )
         val pathColumn = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
             MediaStore.Audio.Media.RELATIVE_PATH else MediaStore.Audio.Media.DATA
         projection += pathColumn
         val result = mutableListOf<AudioTrack>()
+        // MediaStore.Audio.Media já contém apenas arquivos de áudio.
+        // Não filtrar por IS_MUSIC: alguns aparelhos deixam essa flag zerada
+        // para músicas copiadas manualmente ou recebidas por outros aplicativos.
         resolver.query(
             collection,
             projection.toTypedArray(),
-            "${MediaStore.Audio.Media.IS_MUSIC} != 0",
+            null,
             null,
             "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
         )?.use { cursor ->
@@ -91,9 +117,19 @@ object MediaCatalog {
             val album = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
             val albumId = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
             val duration = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+            val dateAdded = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
+            val mimeType = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
             val path = cursor.getColumnIndexOrThrow(pathColumn)
             while (cursor.moveToNext()) {
                 val rawPath = cursor.getString(path).orEmpty()
+                // Gaplin downloads are read from MediaStore.Downloads below so their
+                // embedded tags and artwork are preserved instead of a generic audio row.
+                val gaplinDownloadPath = "${Environment.DIRECTORY_DOWNLOADS}/Gaplin Music"
+                if (
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                    rawPath.trimEnd('/') == gaplinDownloadPath
+                ) continue
+
                 result += AudioTrack(
                     title = cursor.getString(title)?.takeIf(String::isNotBlank) ?: "Faixa sem título",
                     artist = cursor.getString(artist)?.takeIf { it.isNotBlank() && it != "<unknown>" } ?: "Artista desconhecido",
@@ -104,11 +140,232 @@ object MediaCatalog {
                     albumId = cursor.getLong(albumId),
                     artworkUri = cursor.getLong(albumId).takeIf { it > 0L }?.let {
                         ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), it)
-                    }
+                    },
+                    mimeType = cursor.getString(mimeType),
+                    dateAddedEpochSeconds = cursor.getLong(dateAdded)
                 )
             }
         }
         return result
+    }
+
+    /**
+     * Downloads made by Gaplin are stored in Downloads/Gaplin Music.
+     * Query MediaStore.Files instead of Audio.Media because Android may index
+     * WebM audio as application/octet-stream and omit it from the audio collection.
+     */
+    private fun scanGaplinDownloadsAudio(context: Context): List<AudioTrack> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            val directory = File(
+                context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir,
+                "Gaplin Music"
+            )
+            return directory.listFiles().orEmpty()
+                .filter { it.isFile && it.extension.lowercase() in setOf("mp3", "m4a", "aac", "flac", "wav", "ogg", "opus", "weba") }
+                .sortedByDescending { it.lastModified() }
+                .map { file ->
+                    val uri = Uri.fromFile(file)
+                    val embedded = readEmbeddedAudioMetadata(
+                        context, uri, "legacy-${file.name.hashCode()}-${file.lastModified()}"
+                    )
+                    AudioTrack(
+                        title = embedded.title?.takeIf(String::isNotBlank)
+                            ?: file.nameWithoutExtension,
+                        artist = embedded.artist?.takeIf(String::isNotBlank) ?: "Artista desconhecido",
+                        uri = uri,
+                        folderPath = "Downloads/Gaplin Music",
+                        durationMs = readDuration(context, uri),
+                        album = embedded.album?.takeIf(String::isNotBlank) ?: "Downloads",
+                        artworkUri = embedded.artworkUri,
+                        mimeType = downloadedMime(file.name),
+                        dateAddedEpochSeconds = file.lastModified() / 1000L
+                    )
+                }
+        }
+
+        val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.MIME_TYPE,
+            MediaStore.MediaColumns.DATE_ADDED,
+            MediaStore.MediaColumns.DURATION,
+            MediaStore.MediaColumns.RELATIVE_PATH
+        )
+        val relativePath = "${android.os.Environment.DIRECTORY_DOWNLOADS}/Gaplin Music/"
+        val audioExtensions = setOf("mp3", "m4a", "aac", "flac", "wav", "ogg", "opus", "weba")
+        val result = mutableListOf<AudioTrack>()
+
+        context.contentResolver.query(
+            collection,
+            projection,
+            "${MediaStore.MediaColumns.RELATIVE_PATH}=?",
+            arrayOf(relativePath),
+            "${MediaStore.MediaColumns.DATE_ADDED} DESC"
+        )?.use { cursor ->
+            val id = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+            val name = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+            val mime = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
+            val date = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
+            val duration = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DURATION)
+            val path = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.RELATIVE_PATH)
+
+            while (cursor.moveToNext()) {
+                val fileName = cursor.getString(name).orEmpty()
+                val extension = fileName.substringAfterLast('.', "").lowercase()
+                val providerMime = cursor.getString(mime).orEmpty()
+                val isAudio = extension in audioExtensions || providerMime.startsWith("audio/")
+                if (!isAudio) continue
+
+                val resolvedMime = DownloadMimePolicy.resolvedMime(
+                    providerMime = providerMime,
+                    fileName = fileName,
+                    inferredMime = when (extension) {
+                        "mp3" -> "audio/mpeg"
+                        "m4a", "mp4" -> "audio/mp4"
+                        "aac" -> "audio/aac"
+                        "flac" -> "audio/flac"
+                        "wav" -> "audio/wav"
+                        "ogg" -> "audio/ogg"
+                        "opus" -> "audio/opus"
+                        "weba", "webm" -> "audio/webm"
+                        else -> "audio/*"
+                    }
+                )
+
+                val mediaUri = ContentUris.withAppendedId(collection, cursor.getLong(id))
+                val embedded = readEmbeddedAudioMetadata(
+                    context = context,
+                    uri = mediaUri,
+                    cacheKey = "download-${cursor.getLong(id)}-${cursor.getLong(date)}"
+                )
+                result += AudioTrack(
+                    title = embedded.title?.takeIf(String::isNotBlank)
+                        ?: fileName.substringBeforeLast('.', fileName).ifBlank { "Faixa baixada" },
+                    artist = embedded.artist?.takeIf(String::isNotBlank) ?: "Artista desconhecido",
+                    uri = mediaUri,
+                    folderPath = normalizePath(cursor.getString(path).orEmpty()),
+                    durationMs = cursor.getLong(duration).coerceAtLeast(0L),
+                    album = embedded.album?.takeIf(String::isNotBlank) ?: "Downloads",
+                    artworkUri = embedded.artworkUri,
+                    mimeType = resolvedMime,
+                    dateAddedEpochSeconds = cursor.getLong(date)
+                )
+            }
+        }
+        return result
+    }
+
+    private fun scanGaplinDownloadsVideos(context: Context): List<VideoEntry> {
+        val relativePath = "${Environment.DIRECTORY_DOWNLOADS}/Gaplin Music/"
+        val videoExtensions = setOf("mp4", "m4v", "mkv", "webm", "3gp", "mpeg", "mpg")
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            val directory = File(
+                context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir,
+                "Gaplin Music"
+            )
+            return directory.listFiles().orEmpty()
+                .filter { it.isFile && it.extension.lowercase() in videoExtensions }
+                .sortedByDescending { it.lastModified() }
+                .map { file ->
+                    val uri = Uri.fromFile(file)
+                    videoEntry(
+                        fileName = file.name,
+                        uri = uri,
+                        folderPath = "Downloads/Gaplin Music",
+                        sizeBytes = file.length(),
+                        durationMs = readDuration(context, uri),
+                        mimeType = downloadedMime(file.name)
+                    )
+                }
+        }
+
+        val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.MIME_TYPE,
+            MediaStore.MediaColumns.SIZE,
+            MediaStore.MediaColumns.DURATION,
+            MediaStore.MediaColumns.RELATIVE_PATH
+        )
+        val result = mutableListOf<VideoEntry>()
+        context.contentResolver.query(
+            collection,
+            projection,
+            "${MediaStore.MediaColumns.RELATIVE_PATH}=?",
+            arrayOf(relativePath),
+            "${MediaStore.MediaColumns.DATE_ADDED} DESC"
+        )?.use { cursor ->
+            val idIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+            val nameIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+            val mimeIndex = cursor.getColumnIndex(MediaStore.MediaColumns.MIME_TYPE)
+            val sizeIndex = cursor.getColumnIndex(MediaStore.MediaColumns.SIZE)
+            val durationIndex = cursor.getColumnIndex(MediaStore.MediaColumns.DURATION)
+            val pathIndex = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
+            while (cursor.moveToNext()) {
+                val fileName = cursor.getString(nameIndex).orEmpty()
+                if (fileName.substringAfterLast('.', "").lowercase() !in videoExtensions) continue
+                val uri = ContentUris.withAppendedId(collection, cursor.getLong(idIndex))
+                val folderPath = normalizePath(
+                    if (pathIndex >= 0) cursor.getString(pathIndex).orEmpty() else relativePath
+                )
+                val size = if (sizeIndex >= 0) cursor.getLong(sizeIndex).coerceAtLeast(0L) else 0L
+                val duration = if (durationIndex >= 0) cursor.getLong(durationIndex).coerceAtLeast(0L) else 0L
+                val mime = if (mimeIndex >= 0) cursor.getString(mimeIndex).orEmpty().ifBlank {
+                    downloadedMime(fileName)
+                } else downloadedMime(fileName)
+                result += videoEntry(fileName, uri, folderPath, size, duration, mime)
+            }
+        }
+        return result
+    }
+
+    private fun videoEntry(
+        fileName: String,
+        uri: Uri,
+        folderPath: String,
+        sizeBytes: Long,
+        durationMs: Long,
+        mimeType: String
+    ): VideoEntry {
+        val fileNameWithoutExtension = fileName.substringBeforeLast('.', fileName)
+        val episodeMatch = Regex("(?i)S(\\d{1,2})E(\\d{1,3})").find(fileName)
+            ?: Regex("(?i)(\\d{1,2})x(\\d{1,3})").find(fileName)
+            ?: Regex("(?i)(?:temporada|season)[ ._-]*(\\d+).*?(?:epis[oó]dio|episode|ep)[ ._-]*(\\d+)").find(fileName)
+        return VideoEntry(
+            title = fileNameWithoutExtension.replace(Regex("[._]+"), " ").trim(),
+            uri = uri,
+            folderPath = folderPath,
+            folderName = folderPath.trimEnd('/').substringAfterLast('/').ifBlank { "Vídeos" },
+            durationMs = durationMs,
+            sizeBytes = sizeBytes,
+            season = episodeMatch?.groupValues?.getOrNull(1)?.toIntOrNull(),
+            episode = episodeMatch?.groupValues?.getOrNull(2)?.toIntOrNull(),
+            mimeType = mimeType
+        )
+    }
+
+    private fun readDuration(context: Context, uri: Uri): Long {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, uri)
+            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+        } catch (_: Exception) {
+            0L
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
+
+    private fun downloadedMime(fileName: String): String {
+        val extension = fileName.substringAfterLast('.', "").lowercase()
+        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) ?: when (extension) {
+            "m4a", "mp4" -> if (extension == "m4a") "audio/mp4" else "video/mp4"
+            "weba" -> "audio/webm"
+            else -> "application/octet-stream"
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -119,7 +376,8 @@ object MediaCatalog {
             MediaStore.Video.Media._ID,
             MediaStore.Video.Media.DISPLAY_NAME,
             MediaStore.Video.Media.DURATION,
-            MediaStore.Video.Media.SIZE
+            MediaStore.Video.Media.SIZE,
+            MediaStore.MediaColumns.MIME_TYPE
         )
         val pathColumn = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
             MediaStore.Video.Media.RELATIVE_PATH else MediaStore.Video.Media.DATA
@@ -136,6 +394,7 @@ object MediaCatalog {
             val name = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
             val duration = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
             val size = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+            val mimeType = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
             val path = cursor.getColumnIndexOrThrow(pathColumn)
             while (cursor.moveToNext()) {
                 val fileName = cursor.getString(name)?.ifBlank { "Vídeo sem título" } ?: "Vídeo sem título"
@@ -154,7 +413,8 @@ object MediaCatalog {
                     durationMs = cursor.getLong(duration),
                     sizeBytes = cursor.getLong(size),
                     season = season,
-                    episode = episode
+                    episode = episode,
+                    mimeType = cursor.getString(mimeType)
                 )
             }
         }
@@ -165,7 +425,7 @@ object MediaCatalog {
         val root = DocumentFile.fromTreeUri(context, treeUri) ?: return MediaSnapshot(emptyList(), emptyList())
         val audio = mutableListOf<AudioTrack>()
         val videos = mutableListOf<VideoEntry>()
-        val audioExt = setOf("mp3", "m4a", "aac", "flac", "wav", "ogg", "opus")
+        val audioExt = setOf("mp3", "m4a", "aac", "flac", "wav", "ogg", "opus", "weba")
         val videoExt = setOf("mp4", "m4v", "mkv", "webm", "3gp", "mpeg", "mpg")
         fun visit(directory: DocumentFile, depth: Int, relativePath: String) {
             if (depth > 12 || !directory.isDirectory) return
@@ -191,7 +451,9 @@ object MediaCatalog {
                             artist = "Arquivo local",
                             uri = file.uri,
                             folderPath = folder,
-                            durationMs = 0L
+                            durationMs = 0L,
+                            dateAddedEpochSeconds = file.lastModified() / 1000L,
+                            mimeType = file.type
                         )
                         in videoExt -> {
                             val match = Regex("(?i)S(\\d{1,2})E(\\d{1,3})").find(name)
@@ -214,6 +476,40 @@ object MediaCatalog {
         }
         visit(root, 0, root.name?.takeIf(String::isNotBlank) ?: "Pasta selecionada")
         return MediaSnapshot(audio, videos)
+    }
+
+    private fun readEmbeddedAudioMetadata(
+        context: Context,
+        uri: Uri,
+        cacheKey: String
+    ): EmbeddedAudioMetadata {
+        val directory = File(context.cacheDir, "gaplin-audio-artwork")
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, uri)
+            val title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
+            val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
+                ?: retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST)
+            val album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
+            val picture = retriever.embeddedPicture
+            val artworkUri = if (
+                picture != null && picture.isNotEmpty() && picture.size <= 8 * 1024 * 1024 &&
+                (directory.isDirectory || directory.mkdirs())
+            ) {
+                val cached = File(directory, "$cacheKey.img")
+                if (!cached.isFile || cached.length() != picture.size.toLong()) {
+                    cached.outputStream().use { it.write(picture) }
+                }
+                Uri.fromFile(cached)
+            } else {
+                null
+            }
+            EmbeddedAudioMetadata(title, artist, album, artworkUri)
+        } catch (_: Exception) {
+            EmbeddedAudioMetadata(null, null, null, null)
+        } finally {
+            runCatching { retriever.release() }
+        }
     }
 
     private fun normalizePath(path: String): String =

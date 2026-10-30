@@ -2,7 +2,14 @@ name: Android Debug APK
 
 on:
   push:
-    branches: [main, refactor/stability-and-player-ui, feature/file-manager-smart-duplicates]
+    branches:
+      - main
+      - refactor/stability-and-player-ui
+      - feature/file-manager-smart-duplicates
+      - fix/premium-player-3d-ui-20261029
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -14,11 +21,9 @@ concurrency:
 
 jobs:
   build:
-    name: Build Gaplin Music APK
+    name: Build and verify Gaplin Music APK
     runs-on: ubuntu-latest
-    env:
-      ANDROID_HOME: /usr/local/lib/android/sdk
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    timeout-minutes: 90
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -29,29 +34,138 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Verify Android SDK
+      - name: Set up Python for embedded yt-dlp
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install Android SDK 36 platform and build tools
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: |
-          test -d "$ANDROID_HOME/platforms/android-36"
-          test -d "$ANDROID_HOME/build-tools/36.0.0"
-          echo "Android SDK 36 disponível"
+          set -e
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager não encontrado em $ANDROID_HOME/cmdline-tools"
+            exit 1
+          fi
+          echo "Usando SDK manager: $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses
+          "$SDKMANAGER" --install "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+          "$SDKMANAGER" --list_installed
+
+      - name: Install FFmpeg cross-compilation dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake build-essential curl git libtool pkg-config texinfo yasm nasm zlib1g-dev
+
+      - name: Build FFmpeg and MP3 encoder for Android ABIs
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_API: '24'
+          FFMPEG_TAG: n7.1.1
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="$(find "$ANDROID_HOME/ndk" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          test -n "$ANDROID_NDK_HOME"
+          chmod +x scripts/build-ffmpeg-android.sh
+          for ABI in arm64-v8a x86_64; do
+            scripts/build-ffmpeg-android.sh "$ABI"
+          done
+
+      - name: Build QuickJS-NG for Android ABIs
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+        run: |
+          set -euo pipefail
+          QUICKJS_VERSION="v0.17.0"
+          git clone --depth 1 --branch "$QUICKJS_VERSION" https://github.com/quickjs-ng/quickjs.git "$RUNNER_TEMP/quickjs-ng"
+
+          NDK="$(find "$ANDROID_HOME/ndk" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          CMAKE="$(find "$ANDROID_HOME/cmake" -type f -path '*/bin/cmake' | sort -V | tail -n 1)"
+          READELF="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          test -x "$CMAKE"
+          test -x "$READELF"
+
+          for ABI in arm64-v8a x86_64; do
+            BUILD_DIR="$RUNNER_TEMP/quickjs-build-$ABI"
+            "$CMAKE" -S "$RUNNER_TEMP/quickjs-ng" -B "$BUILD_DIR" \
+              -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+              -DANDROID_ABI="$ABI" \
+              -DANDROID_PLATFORM=android-24 \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DQJS_ENABLE_INSTALL=OFF \
+              -DQJS_BUILD_EXAMPLES=OFF \
+              -DQJS_BUILD_CLI_STATIC=OFF \
+              -DQJS_BUILD_WERROR=OFF \
+              -DCMAKE_EXE_LINKER_FLAGS=-Wl,-z,max-page-size=16384
+            "$CMAKE" --build "$BUILD_DIR" --target qjs_exe --parallel 2
+
+            QJS_BIN="$(find "$BUILD_DIR" -type f -name qjs -perm -111 | head -n 1)"
+            test -n "$QJS_BIN"
+            DEST="yt-dlp-runtime/src/main/jniLibs/$ABI"
+            mkdir -p "$DEST"
+            install -m 0755 "$QJS_BIN" "$DEST/libqjs.so"
+            "$READELF" -h "$DEST/libqjs.so" | grep -E "Class:.*ELF64|Machine:"
+            echo "QuickJS-NG $QUICKJS_VERSION packaged in nativeLibraryDir for $ABI ($(stat -c%s "$DEST/libqjs.so") bytes)"
+          done
 
       - name: Set up Gradle 8.13
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
 
-      - name: Build Debug APK
-        run: gradle --no-daemon --stacktrace assembleDebug
-
-      - name: Verify APK
+      - name: Verify build toolchain
         run: |
-          test -s app/build/outputs/apk/debug/app-debug.apk
-          ls -lh app/build/outputs/apk/debug/app-debug.apk
+          java -version
+          python --version
+          gradle --version
+          test -d "$ANDROID_HOME/platforms/android-36"
+          test -d "$ANDROID_HOME/build-tools/36.0.0"
+          grep -q "yt-dlp==2026.10.26" yt-dlp-runtime/build.gradle
+          grep -q "mutagen==1.47.0" yt-dlp-runtime/build.gradle
 
-      - name: Upload Debug APK
+      - name: Install and verify yt-dlp EJS Python package
+        run: |
+          python -m pip install --disable-pip-version-check "yt-dlp==2026.10.26" "yt-dlp-ejs==0.8.0" "mutagen==1.47.0"
+          python -c "from importlib.metadata import version; assert version('yt-dlp-ejs') == '0.8.0'; assert version('mutagen') == '1.47.0'; print('yt-dlp-ejs', version('yt-dlp-ejs'), 'mutagen', version('mutagen'))"
+
+      - name: Test downloader option adapter
+        run: python -m unittest discover -s yt-dlp-runtime/src/test/python -p "test_*.py" -v
+
+      - name: Run unit tests and build APK
+        run: gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug
+
+      - name: Verify generated APK
+        run: |
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          unzip -l "$APK" | grep -q "lib/arm64-v8a/libqjs.so"
+          unzip -l "$APK" | grep -q "lib/x86_64/libqjs.so"
+          unzip -l "$APK" | grep -q "lib/arm64-v8a/libffmpeg.so"
+          unzip -l "$APK" | grep -q "lib/x86_64/libffmpeg.so"
+          unzip -l "$APK" | grep -q "lib/arm64-v8a/libffprobe.so"
+          unzip -l "$APK" | grep -q "lib/x86_64/libffprobe.so"
+          sha256sum "$APK"
+          ls -lh "$APK"
+
+      # Publish the installable APK as soon as the build is verified.
+      # Emulator boot can fail on hosted runners independently of APK compilation.
+      - name: Upload installable debug APK
         uses: actions/upload-artifact@v4
         with:
           name: gaplin-music-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Verify QuickJS and yt-dlp-ejs inside Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: gradle --no-daemon --stacktrace :app:connectedDebugAndroidTest

@@ -88,7 +88,7 @@ private val TextMuted = Color(0xFF8798BD)
 private data class LocalPlaylist(val id: String, val name: String, val trackUris: List<String>)
 
 private enum class AppTab(val label: String) {
-    HOME("Início"), MUSIC("Música"), FILES("Pastas"), FAVORITES("Favoritos"), VIDEOS("Vídeo"), MORE("Mais")
+    HOME("Início"), MUSIC("Música"), FILES("Pastas"), FAVORITES("Favoritos"), VIDEOS("Vídeo"), DOWNLOADS("Downloads"), MORE("Mais")
 }
 
 class MainActivity : ComponentActivity() {
@@ -302,13 +302,21 @@ class MainActivity : ComponentActivity() {
                     playbackError = "O mecanismo de reprodução ainda está iniciando."
                     return
                 }
-                fun mediaItem(item: AudioTrack) = MediaItem.Builder()
-                    .setMediaId(item.uri.toString())
-                    .setUri(item.uri)
-                    .setMediaMetadata(
-                        MediaMetadata.Builder().setTitle(item.title).setArtist(item.artist).setAlbumTitle(item.album).setArtworkUri(item.artworkUri).build()
+                fun mediaItem(item: AudioTrack): MediaItem {
+                    val builder = MediaItem.Builder()
+                        .setMediaId(item.uri.toString())
+                        .setUri(item.uri)
+                    item.mimeType?.takeIf { it.isNotBlank() }?.let(builder::setMimeType)
+                    builder.setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(item.title)
+                            .setArtist(item.artist)
+                            .setAlbumTitle(item.album)
+                            .setArtworkUri(item.artworkUri)
+                            .build()
                     )
-                    .build()
+                    return builder.build()
+                }
                 if (queue.isNotEmpty() && startIndex >= 0) {
                     player.setMediaItems(queue.map(::mediaItem), startIndex, 0L)
                 } else {
@@ -333,9 +341,11 @@ class MainActivity : ComponentActivity() {
                 requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                 showFullscreenVideo = true
 
-                val item = MediaItem.Builder()
+                val mediaItemBuilder = MediaItem.Builder()
                     .setMediaId(video.uri.toString())
                     .setUri(video.uri)
+                video.mimeType?.takeIf { it.isNotBlank() }?.let(mediaItemBuilder::setMimeType)
+                val item = mediaItemBuilder
                     .setMediaMetadata(MediaMetadata.Builder().setTitle(video.title).build())
                     .build()
                 player.setMediaItem(item)
@@ -366,7 +376,7 @@ class MainActivity : ComponentActivity() {
                     },
                     bottomBar = {
                         NavigationBar(containerColor = Color(0xFF08142F), tonalElevation = 0.dp) {
-                            listOf(AppTab.MUSIC, AppTab.VIDEOS, AppTab.MORE).forEach { tab ->
+                            listOf(AppTab.MUSIC, AppTab.VIDEOS, AppTab.DOWNLOADS, AppTab.MORE).forEach { tab ->
                                 val moreSelected = activeTab in setOf(AppTab.HOME, AppTab.FILES, AppTab.FAVORITES, AppTab.MORE)
                                 NavigationBarItem(
                                     selected = if (tab == AppTab.MORE) moreSelected else activeTab == tab,
@@ -383,6 +393,7 @@ class MainActivity : ComponentActivity() {
                                             when (tab) {
                                                 AppTab.MUSIC -> Icons.Default.MusicNote
                                                 AppTab.VIDEOS -> Icons.Default.VideoLibrary
+                                                AppTab.DOWNLOADS -> Icons.Default.Download
                                                 else -> Icons.Default.MoreHoriz
                                             }, contentDescription = tab.label
                                         )
@@ -422,10 +433,28 @@ class MainActivity : ComponentActivity() {
                             AppTab.MUSIC -> {
                                 ScreenHeading("Músicas", "${catalog.audio.size} faixas na sua biblioteca")
                                 Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            startActivity(
+                                                Intent(this@MainActivity, FileManagerActivity::class.java)
+                                                    .putExtra("initial_filter", ManagerFilter.AUDIO.name)
+                                            )
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 13.dp, vertical = 5.dp)
+                                    ) {
+                                        Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Selecionar / excluir", fontSize = 11.sp)
+                                    }
+                                }
+                                Row(
                                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp),
                                     horizontalArrangement = Arrangement.spacedBy(7.dp)
                                 ) {
-                                    listOf("Músicas", "Playlists", "Pastas", "Artistas", "Álbuns").forEach { section ->
+                                    listOf("Músicas", "Recentemente adicionadas", "Playlists", "Pastas", "Artistas", "Álbuns").forEach { section ->
                                         Text(
                                             section,
                                             modifier = Modifier.clip(RoundedCornerShape(18.dp))
@@ -456,8 +485,31 @@ class MainActivity : ComponentActivity() {
                                 when (musicSection) {
                                     "Músicas" -> AudioList(
                                         filtered, currentAudio, favoriteUris,
-                                        { playAudio(it, filtered) }, ::toggleFavorite
+                                        { playAudio(it, filtered) }, ::toggleFavorite,
+                                        onRequestPermission = {
+                                            if (audioPermission) folderPicker.launch(selectedTreeUri)
+                                            else requestMissingPermissions()
+                                        },
+                                        emptyActionLabel = if (audioPermission) "Selecionar pasta de músicas" else "Permitir acesso às músicas"
                                     )
+                                    "Recentemente adicionadas" -> {
+                                        val recentlyAdded = MusicLibraryPolicy.recentlyAdded(filtered, { it.dateAddedEpochSeconds }, { it.title })
+                                        if (recentlyAdded.isEmpty()) {
+                                            EmptyPanel(
+                                                Icons.Default.History,
+                                                "Nenhuma música recente",
+                                                "As músicas que você baixar ou adicionar aparecerão aqui, da mais nova para a mais antiga."
+                                            )
+                                        } else {
+                                            AudioList(
+                                                recentlyAdded,
+                                                currentAudio,
+                                                favoriteUris,
+                                                { playAudio(it, recentlyAdded) },
+                                                ::toggleFavorite
+                                            )
+                                        }
+                                    }
                                     "Playlists" -> {
                                         val selectedPlaylist = playlists.firstOrNull { it.id == selectedPlaylistId }
                                         if (selectedPlaylist != null) {
@@ -604,8 +656,64 @@ class MainActivity : ComponentActivity() {
                                     startActivity(Intent(this@MainActivity, FileManagerActivity::class.java))
                                 }
                             )
+                            AppTab.DOWNLOADS -> DownloadsScreen(
+                                onLibraryRefresh = ::scanLibrary,
+                                onPlayDownloaded = { media ->
+                                    if (media.audioOnly) {
+                                        scope.launch {
+                                            val catalogTrack = withContext(Dispatchers.IO) {
+                                                MediaCatalog.scan(
+                                                    context = this@MainActivity,
+                                                    includeAudio = false,
+                                                    includeVideo = false
+                                                ).audio.firstOrNull { it.uri == media.uri }
+                                            }
+                                            val track = catalogTrack ?: AudioTrack(
+                                                title = media.title,
+                                                artist = "Artista desconhecido",
+                                                uri = media.uri,
+                                                folderPath = "Downloads/Gaplin Music",
+                                                durationMs = 0L,
+                                                mimeType = media.mimeType
+                                            )
+                                            playAudio(track, listOf(track))
+                                        }
+                                    } else {
+                                        val video = VideoEntry(
+                                            title = media.title,
+                                            uri = media.uri,
+                                            folderPath = "Downloads/Gaplin Music",
+                                            folderName = "Gaplin Music",
+                                            durationMs = 0L,
+                                            sizeBytes = 0L,
+                                            season = null,
+                                            episode = null,
+                                            mimeType = media.mimeType
+                                        )
+                                        playVideo(video)
+                                    }
+                                }
+                            )
                             AppTab.VIDEOS -> {
                                 ScreenHeading("Filmes e séries", "${catalog.videos.size} vídeos encontrados")
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            startActivity(
+                                                Intent(this@MainActivity, FileManagerActivity::class.java)
+                                                    .putExtra("initial_filter", ManagerFilter.VIDEO.name)
+                                            )
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 13.dp, vertical = 5.dp)
+                                    ) {
+                                        Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Selecionar / excluir", fontSize = 11.sp)
+                                    }
+                                }
                                 SearchBox(search) { search = it }
                                 val filtered = catalog.videos.filter {
                                     it.title.contains(search, true) || it.seriesName.contains(search, true) ||
@@ -1203,10 +1311,26 @@ private fun AudioList(
     current: AudioTrack?,
     favorites: Set<String>,
     onPlay: (AudioTrack) -> Unit,
-    onFavorite: (AudioTrack) -> Unit
+    onFavorite: (AudioTrack) -> Unit,
+    onRequestPermission: (() -> Unit)? = null,
+    emptyActionLabel: String = "Permitir acesso às músicas"
 ) {
     if (tracks.isEmpty()) {
-        EmptyPanel(Icons.Default.MusicOff, "Nenhuma música encontrada", "Confira as permissões e atualize a biblioteca.")
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            EmptyPanel(
+                Icons.Default.MusicOff,
+                "Nenhuma música encontrada",
+                if (onRequestPermission != null) "Permita o acesso aos arquivos de áudio e atualize a biblioteca."
+                else "Adicione músicas à biblioteca ou selecione uma pasta para pesquisar."
+            )
+            if (onRequestPermission != null) {
+                FilledTonalButton(onClick = onRequestPermission) {
+                    Icon(Icons.Default.FolderOpen, null)
+                    Spacer(Modifier.width(7.dp))
+                    Text(emptyActionLabel)
+                }
+            }
+        }
     } else {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(5.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
             items(tracks, key = { it.uri.toString() }) { track ->
@@ -1442,9 +1566,9 @@ private fun MiniPlayer(track: AudioTrack, playing: Boolean, onToggle: () -> Unit
 @Composable
 private fun TrackArtwork(track: AudioTrack, modifier: Modifier = Modifier) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    var artwork by remember(track.artworkUri) { mutableStateOf<ImageBitmap?>(null) }
+    var artwork by remember(track.uri, track.artworkUri) { mutableStateOf<ImageBitmap?>(null) }
 
-    LaunchedEffect(track.artworkUri) {
+    LaunchedEffect(track.uri, track.artworkUri) {
         artwork = withContext(Dispatchers.IO) {
             track.artworkUri?.let { uri ->
                 runCatching {
@@ -1493,7 +1617,9 @@ private fun ParticleAudioVisualizer(
         ),
         label = "neural-spectrum-phase"
     )
-    val motion = if (isPlaying) 1f else 0.22f
+    val motion = if (isPlaying) 1f else 0.28f
+    val hasMeasuredSignal = spectrum.any { it > 0.012f }
+
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
@@ -1502,87 +1628,114 @@ private fun ParticleAudioVisualizer(
         val depthRows = 25
         val p = phase + progress * 5.2f
         val palette = listOf(
-            Color(0xFF13D8FF),
-            Color(0xFF397BFF),
-            Color(0xFF8B4DFF),
-            Color(0xFFED36F5),
-            Color(0xFFFF55B8)
+            Color(0xFF19DDF5),
+            Color(0xFF438BFF),
+            Color(0xFF8A62FF),
+            Color(0xFFE34AEF),
+            Color(0xFFFF62B8)
         )
 
         fun amplitudeAt(x: Float): Float {
-            val index = (x.coerceIn(0f, 1f) * (spectrum.size - 1).coerceAtLeast(0)).toInt()
+            val coordinate = x.coerceIn(0f, 1f)
+            val index = (coordinate * (spectrum.size - 1).coerceAtLeast(0)).toInt()
             val measuredEnergy = spectrum.getOrNull(index)?.coerceIn(0f, 1f) ?: 0f
-            val envelope = kotlin.math.sqrt(kotlin.math.sin(Math.PI * x).toFloat().coerceAtLeast(0f))
-            val microMotion = 0.94f + 0.06f * kotlin.math.sin(p * 1.35f + x * 11f)
-            val responsiveEnergy = (measuredEnergy * 1.9f).coerceIn(0f, 1f)
-            return (0.08f + responsiveEnergy * 1.05f) * envelope * microMotion * motion
+            val ambientEnergy = 0.16f +
+                0.25f * kotlin.math.abs(kotlin.math.sin(p * 0.82f - coordinate * 8.6f)) +
+                0.12f * kotlin.math.abs(kotlin.math.cos(p * 0.57f + coordinate * 17f))
+            val response = if (hasMeasuredSignal) {
+                (kotlin.math.sqrt(measuredEnergy) * 0.78f + measuredEnergy * 0.50f).coerceIn(0f, 1f)
+            } else {
+                ambientEnergy
+            }
+            val envelope = kotlin.math.sqrt(
+                kotlin.math.sin(Math.PI * coordinate).toFloat().coerceAtLeast(0f)
+            )
+            val microMotion = 0.94f + 0.06f * kotlin.math.sin(p * 1.35f + coordinate * 11f)
+            return (0.10f + response * 0.88f) * envelope * microMotion * motion
         }
 
         fun colorAt(x: Float): Color {
             val scaled = x.coerceIn(0f, 1f) * (palette.size - 1)
             val index = scaled.toInt().coerceIn(0, palette.lastIndex - 1)
-            return androidx.compose.ui.graphics.lerp(palette[index], palette[index + 1], scaled - index)
+            return androidx.compose.ui.graphics.lerp(
+                palette[index],
+                palette[index + 1],
+                scaled - index
+            )
         }
 
-        // Soft atmospheric light behind the particle sculpture.
+        // Deep radial glow keeps the center luminous without washing out the artwork.
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf(Color(0x663B4DFF), Color(0x22201675), Color.Transparent),
+                colors = listOf(
+                    Color(0x66514CFF),
+                    Color(0x30302A9A),
+                    Color(0x10101945),
+                    Color.Transparent
+                ),
                 center = androidx.compose.ui.geometry.Offset(w * 0.5f, centerY),
-                radius = w * 0.49f
+                radius = w * 0.58f
             ),
-            radius = w * 0.49f,
+            radius = w * 0.58f,
             center = androidx.compose.ui.geometry.Offset(w * 0.5f, centerY)
         )
 
-        // Several depth layers form a continuous, volumetric sound field.
-        for (layer in 0 until 4) {
-            val layerOffset = (layer - 1.5f) * h * 0.035f
-            val layerAlpha = 0.16f + (3 - layer) * 0.035f
+        // Layered spectral ribbons create depth and a continuous 3D sound field.
+        for (layer in 0 until 5) {
+            val layerOffset = (layer - 2f) * h * 0.031f
+            val layerAlpha = 0.14f + (4 - layer) * 0.035f
             val path = androidx.compose.ui.graphics.Path()
             for (i in 0..columns) {
                 val xFactor = i / columns.toFloat()
-                val x = w * (0.055f + xFactor * 0.89f)
+                val x = w * (0.035f + xFactor * 0.93f)
                 val envelope = amplitudeAt(xFactor)
                 val carrier = kotlin.math.sin(xFactor * 12.5f - p * 1.25f + layer * 0.55f)
                 val secondary = kotlin.math.cos(xFactor * 25f + p * 0.72f - layer)
-                val y = centerY + layerOffset +
-                    (carrier * 0.17f + secondary * 0.052f) * h * envelope
+                val tertiary = kotlin.math.sin(xFactor * 5.8f + p * 0.62f + layer)
+                val displacement = (
+                    carrier * 0.19f + secondary * 0.056f + tertiary * 0.032f
+                ) * h * envelope
+                val y = centerY + layerOffset + displacement
                 if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
             }
             drawPath(
                 path = path,
                 brush = Brush.horizontalGradient(palette),
                 style = androidx.compose.ui.graphics.drawscope.Stroke(
-                    width = if (layer == 1 || layer == 2) 1.9.dp.toPx() else 1.1.dp.toPx()
+                    width = if (layer == 2) 2.2.dp.toPx() else 1.15.dp.toPx(),
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round
                 ),
                 alpha = layerAlpha
             )
         }
 
-        // Dense but restrained particle mesh; perspective makes the field feel 3D.
+        // Perspective particle mesh: denser near the horizon, softer at the edges.
         for (row in 0 until depthRows) {
             val depth = row / (depthRows - 1f)
-            val perspective = 0.34f + 0.66f * kotlin.math.sin(Math.PI * depth).toFloat()
-            val depthY = (depth - 0.5f) * h * 0.60f
+            val perspective = 0.28f + 0.72f * kotlin.math.sin(Math.PI * depth).toFloat()
+            val depthY = (depth - 0.5f) * h * 0.58f
             for (column in 0 until columns) {
                 val xFactor = column / (columns - 1f)
-                val x = w * (0.055f + xFactor * 0.89f)
+                val x = w * (0.035f + xFactor * 0.93f)
                 val envelope = amplitudeAt(xFactor)
                 val waveA = kotlin.math.sin(xFactor * 13f - p * 1.25f + depth * 4.2f)
                 val waveB = kotlin.math.cos(xFactor * 23f + p * 0.78f - depth * 5.4f)
                 val crossWave = kotlin.math.sin(depth * 9f + xFactor * 8f - p * 0.55f)
-                val displacement = (waveA * 0.19f + waveB * 0.058f + crossWave * 0.038f) * h * envelope
+                val displacement = (
+                    waveA * 0.21f + waveB * 0.064f + crossWave * 0.042f
+                ) * h * envelope
                 val y = centerY + depthY + displacement
-                val pulse = 0.68f + 0.32f * kotlin.math.sin(p * 1.8f + column * 0.12f + row * 0.19f)
+                val pulse = 0.66f + 0.34f * kotlin.math.sin(p * 1.8f + column * 0.12f + row * 0.19f)
                 val edge = kotlin.math.sin(Math.PI * xFactor).toFloat().coerceAtLeast(0f)
                 val color = colorAt(xFactor)
-                val radius = (0.55f + 0.95f * pulse) * perspective
-                val alpha = (0.30f + 0.66f * edge * pulse) * (0.38f + 0.62f * envelope.coerceAtMost(1f))
+                val radius = (0.60f + 1.05f * pulse) * perspective
+                val alpha = (0.26f + 0.68f * edge * pulse) *
+                    (0.34f + 0.66f * envelope.coerceAtMost(1f))
+
                 if (row % 2 == 0 && column % 2 == 0) {
                     drawCircle(
-                        color = color.copy(alpha = alpha * 0.12f),
-                        radius = radius * 2.7f,
+                        color = color.copy(alpha = alpha * 0.16f),
+                        radius = radius * 2.8f,
                         center = androidx.compose.ui.geometry.Offset(x, y)
                     )
                 }
@@ -1594,25 +1747,25 @@ private fun ParticleAudioVisualizer(
             }
         }
 
-        // A crisp luminous signal travels through the center of the mesh.
+        // Bright central signal anchors the animation visually.
         val signal = androidx.compose.ui.graphics.Path()
         for (i in 0..columns) {
             val xFactor = i / columns.toFloat()
-            val x = w * (0.055f + xFactor * 0.89f)
+            val x = w * (0.035f + xFactor * 0.93f)
             val env = amplitudeAt(xFactor)
-            val y = centerY + kotlin.math.sin(xFactor * 15f - p * 1.45f) * h * 0.18f * env
+            val y = centerY + kotlin.math.sin(xFactor * 15f - p * 1.45f) * h * 0.20f * env
             if (i == 0) signal.moveTo(x, y) else signal.lineTo(x, y)
         }
         drawPath(
             signal,
             brush = Brush.horizontalGradient(
-                listOf(Color(0xFF24DFFF), Color(0xFF7864FF), Color(0xFFFF4BD8))
+                listOf(Color(0xFF48E8FF), Color(0xFF8C72FF), Color(0xFFFF6BD6))
             ),
             style = androidx.compose.ui.graphics.drawscope.Stroke(
-                width = 1.15.dp.toPx(),
+                width = 1.6.dp.toPx(),
                 cap = androidx.compose.ui.graphics.StrokeCap.Round
             ),
-            alpha = if (isPlaying) 0.88f else 0.42f
+            alpha = if (isPlaying) 0.92f else 0.48f
         )
     }
 }
@@ -1724,8 +1877,8 @@ private fun NowPlayingDialog(
 
                 Spacer(Modifier.height(8.dp))
                 Box(
-                    Modifier.fillMaxWidth().weight(1f).heightIn(min = 180.dp, max = 330.dp),
-                    contentAlignment = Alignment.BottomCenter
+                    Modifier.fillMaxWidth().weight(1f).heightIn(min = 220.dp, max = 370.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     ParticleAudioVisualizer(
                         isPlaying = player.isPlaying,
@@ -1733,10 +1886,31 @@ private fun NowPlayingDialog(
                         spectrum = spectrumData,
                         modifier = Modifier.fillMaxSize()
                     )
+                    Box(
+                        Modifier.size(226.dp)
+                            .clip(RoundedCornerShape(32.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(
+                                        Color(0xFF3DE5FF),
+                                        Color(0xFF8A62FF),
+                                        Color(0xFFFF62B8)
+                                    )
+                                )
+                            )
+                            .padding(3.dp)
+                    ) {
+                        TrackArtwork(
+                            track,
+                            Modifier.fillMaxSize().clip(RoundedCornerShape(29.dp))
+                        )
+                    }
+
                     if (!spectrumPermissionGranted) {
                         TextButton(
                             onClick = { showSpectrumPermissionInfo = true },
-                            modifier = Modifier.padding(bottom = 7.dp)
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                                .padding(bottom = 5.dp)
                                 .clip(RoundedCornerShape(50))
                                 .background(Color(0xCC111A38))
                         ) {
@@ -1751,24 +1925,57 @@ private fun NowPlayingDialog(
                             fontSize = 9.sp,
                             letterSpacing = 1.1.sp,
                             maxLines = 2,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp)
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                                .padding(horizontal = 8.dp, vertical = 7.dp)
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(Color(0xCC111A38))
                                 .padding(horizontal = 10.dp, vertical = 7.dp)
                         )
                     }
                 }
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(12.dp))
 
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    TrackArtwork(track, Modifier.size(58.dp).clip(RoundedCornerShape(12.dp)))
-                    Column(Modifier.weight(1f).padding(start = 12.dp, end = 6.dp)) {
-                        Text(track.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(track.artist, color = TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(track.album, color = VioletSoft, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Box(Modifier.fillMaxWidth()) {
+                    Column(
+                        Modifier.fillMaxWidth().padding(horizontal = 38.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            track.title,
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Text(
+                            track.artist,
+                            color = TextMuted,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Text(
+                            track.album,
+                            color = VioletSoft,
+                            fontSize = 10.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
                     }
-                    IconButton(onClick = onFavorite) {
-                        Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, tint = if (favorite) Violet else Color.White, modifier = Modifier.size(26.dp))
+                    IconButton(
+                        onClick = onFavorite,
+                        modifier = Modifier.align(Alignment.CenterEnd)
+                    ) {
+                        Icon(
+                            if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            null,
+                            tint = if (favorite) Violet else Color.White,
+                            modifier = Modifier.size(26.dp)
+                        )
                     }
                 }
 

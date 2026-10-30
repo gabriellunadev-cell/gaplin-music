@@ -1,0 +1,77 @@
+================================================================================
+THIRD-PARTY NOTICES — yt-dlp-android (Free)
+--------------------------------------------------------------------------------
+YT-DLP-EJS
+--------------------------------------------------------------------------------
+Copyright (c) yt-dlp contributors.
+Licensed under the Unlicense.
+Repository: https://github.com/yt-dlp/ejs
+Package version bundled: 0.8.0
+
+--------------------------------------------------------------------------------
+QUICKJS-NG
+--------------------------------------------------------------------------------
+Copyright (c) 2017-2026 Fabrice Bellard
+Copyright (c) 2017-2024 Charlie Gordon
+Copyright (c) 2023-2026 Ben Noordhuis
+Copyright (c) 2023-2026 Saúl Ibarra Corretgé
+Licensed under the MIT License. The full license is available at:
+https://github.com/quickjs-ng/quickjs/blob/v0.17.0/LICENSE
+Runtime version bundled: v0.17.0, compiled for Android arm64-v8a and x86_64.
+
+--------------------------------------------------------------------------------
+FFMPEG
+--------------------------------------------------------------------------------
+Copyright (c) 2000-2025 the FFmpeg developers.
+Bundled version: n7.1.1, built for Android arm64-v8a and x86_64.
+This build enables GPL components and is distributed under GNU GPL version 3.
+The complete license is included at licenses/FFmpeg-COPYING.GPLv3.
+Source: https://github.com/FFmpeg/FFmpeg/tree/n7.1.1
+
+--------------------------------------------------------------------------------
+LAME MP3 ENCODER
+--------------------------------------------------------------------------------
+Copyright (c) 1999-2023 The LAME project.
+Bundled version: 3.100, statically linked as libmp3lame.
+Licensed under GNU Library General Public License version 2.
+The complete license is included at licenses/LAME-COPYING.LGPLv2.
+Source: https://sourceforge.net/projects/lame/files/lame/3.100/
+
+================================================================================
+Include this file in your application's "Open Source Licenses" or "About"
+screen, or bundle it as an asset accessible to the user.
+
+--------------------------------------------------------------------------------
+YT-DLP
+--------------------------------------------------------------------------------
+Copyright (c) 2021-2026 yt-dlp contributors.
+Licensed under the Unlicense (public domain dedication).
+Repository: https://github.com/yt-dlp/yt-dlp
+
+--------------------------------------------------------------------------------
+CHAQUOPY
+--------------------------------------------------------------------------------
+Copyright (c) 2017-2026 Chaquo Ltd.
+Licensed under the MIT License.
+Repository: https://github.com/chaquo/chaquopy
+
+--------------------------------------------------------------------------------
+PYTHON
+--------------------------------------------------------------------------------
+Copyright (c) 2001-2026 Python Software Foundation.
+Licensed under the PSF License (BSD-like, permissive).
+
+--------------------------------------------------------------------------------
+TERMS OF SERVICE NOTICE
+--------------------------------------------------------------------------------
+This library provides the technical capability to download media from
+internet services. The developer integrating this library is solely
+responsible for ensuring that their application's use complies with the
+Terms of Service of any third-party platform accessed, applicable
+copyright law, and any other relevant regulations.
+
+Jokobee provides the tool. Lawful use is your responsibility.
+
+--------------------------------------------------------------------------------
+Build scripts and packaging: copyright (c) 2026 Jokobee (www.jokobee.com)
+================================================================================
