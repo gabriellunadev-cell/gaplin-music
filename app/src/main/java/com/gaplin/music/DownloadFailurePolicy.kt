@@ -4,6 +4,10 @@ internal object DownloadFailurePolicy {
     fun userMessage(raw: String, hasOwnSession: Boolean, isYouTube: Boolean): String {
         val value = raw.lowercase()
 
+        if ("unsupported downloader option" in value) {
+            return "O motor de download recebeu uma opção incompatível. A configuração foi registrada para correção; atualize o Gaplin Music para a versão mais recente."
+        }
+
         if ("this video is not available" in value ||
             "video unavailable" in value ||
             "not available in your country" in value
