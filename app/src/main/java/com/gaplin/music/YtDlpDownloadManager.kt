@@ -132,6 +132,19 @@ class YtDlpDownloadManager(context: Context) {
         return executable
     }
 
+    private fun awaitProcessExit(process: Process, timeoutSeconds: Long, timeoutMessage: String): Int {
+        val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+        return try {
+            val completion = executor.submit<Int> { process.waitFor() }
+            completion.get(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS)
+        } catch (_: java.util.concurrent.TimeoutException) {
+            process.destroyForcibly()
+            throw IllegalStateException(timeoutMessage)
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
     private fun runNativeTool(executable: File, vararg arguments: String): String {
         val outputFile = File(appContext.cacheDir, "gaplin-native-check-${System.nanoTime()}.log")
         try {
