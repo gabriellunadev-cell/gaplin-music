@@ -15,4 +15,12 @@ internal object DownloadExecutionRuntime {
     val mutex = Mutex()
     val active = MutableStateFlow(false)
     val completionVersion = MutableStateFlow(0)
+
+    private val knownRequests = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    fun reserveRequest(key: String): Boolean = knownRequests.add(key)
+
+    fun releaseRequest(key: String) {
+        knownRequests.remove(key)
+    }
 }
